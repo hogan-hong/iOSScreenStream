@@ -11,14 +11,10 @@ env:
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
   THEOS_DEVICE_IP: 127.0.0.1
   THEOS_DEVICE_PORT: 58422
-  THEOS: ${{ github.workspace }}/theos
 
 jobs:
   build:
     runs-on: macos-14
-    defaults:
-      run:
-        working-directory: tweak
 
     steps:
       - name: Checkout repository
@@ -49,11 +45,14 @@ jobs:
       - name: Copy TrollVNC headers and source
         run: |
           mkdir -p theos/include/TrollVNC
-          cp -r trollvnc/src/STHIDEventGenerator.h theos/include/TrollVNC/
+          mkdir -p tweak/include
+          mkdir -p tweak/src
+          cp trollvnc/src/STHIDEventGenerator.h theos/include/TrollVNC/
           cp -r trollvnc/include/* theos/include/ 2>/dev/null || true
           cp -r trollvnc/include-spi/* theos/include/ 2>/dev/null || true
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
           cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
+          ls -la trollvnc/src/
 
       - name: Install iOS SDKs (with fallback)
         run: |
@@ -71,8 +70,10 @@ jobs:
 
       - name: Build package
         run: |
+          cd tweak
           pwd
           ls -la
+          export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
           ls -la $THEOS/makefiles/ 2>/dev/null | head -5
           ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
@@ -82,7 +83,8 @@ jobs:
 
       - name: Prepare artifacts
         run: |
-          mkdir -p ../artifacts
+          mkdir -p artifacts
+          cd tweak
           if [ -d "packages" ]; then
             ls -la packages/
             cp packages/*.deb ../artifacts/ 2>/dev/null || echo "No deb"
