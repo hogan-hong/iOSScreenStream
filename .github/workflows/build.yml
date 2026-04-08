@@ -1,0 +1,117 @@
+name: Build iOSScreenStream
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  FINALPACKAGE: 1
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install xcbeautify ldid-procursus p7zip make
+
+      - name: Checkout Theos
+        uses: actions/checkout@v4
+        with:
+          repository: roothide/theos
+          path: theos
+          submodules: recursive
+
+      - name: Checkout TrollVNC (for STHIDEventGenerator)
+        uses: actions/checkout@v4
+        with:
+          repository: hogan-hong/TrollVNC
+          path: trollvnc
+          sparse-checkout: |
+            src/STHIDEventGenerator.h
+            src/STHIDEventGenerator.mm
+            include-spi
+            include
+
+      - name: Copy TrollVNC headers
+        run: |
+          mkdir -p theos/include/TrollVNC
+          cp -r trollvnc/src/STHIDEventGenerator.h theos/include/TrollVNC/
+          cp -r trollvnc/include/* theos/include/ 2>/dev/null || true
+          cp -r trollvnc/include-spi/* theos/include/ 2>/dev/null || true
+
+      - name: Copy STHIDEventGenerator source to project
+        run: |
+          cp trollvnc/src/STHIDEventGenerator.h tweak/include/
+          cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
+
+      - name: Install iOS SDKs
+        run: |
+          export THEOS=$GITHUB_WORKSPACE/theos
+          cd theos
+          ./bin/install-sdk iPhoneOS16.5
+          ./bin/install-sdk iPhoneOS14.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+
+      - name: Build package
+        run: |
+          cd tweak
+          export THEOS=$GITHUB_WORKSPACE/theos
+          gmake clean package
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          if [ -d "tweak/packages" ]; then
+            cp tweak/packages/*.deb artifacts/
+          fi
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOSScreenStream
+          path: artifacts/*.deb
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: iOSScreenStream
+          path: release-packages
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ github.sha }}
+          name: iOSScreenStream Build
+          body: |
+            Automated build from GitHub Actions
+            
+            Built commit: ${{ github.sha }}
+            
+            **Requires TrollVNC to be installed on the device!**
+          files: release-packages/**/*
+          draft: false
+          prerelease: true
