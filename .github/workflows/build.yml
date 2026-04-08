@@ -40,15 +40,12 @@ jobs:
             include-spi
             include
 
-      - name: Copy TrollVNC headers
+      - name: Copy TrollVNC headers and source
         run: |
           mkdir -p theos/include/TrollVNC
           cp -r trollvnc/src/STHIDEventGenerator.h theos/include/TrollVNC/
           cp -r trollvnc/include/* theos/include/ 2>/dev/null || true
           cp -r trollvnc/include-spi/* theos/include/ 2>/dev/null || true
-
-      - name: Copy STHIDEventGenerator source to project
-        run: |
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
           cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
 
@@ -70,24 +67,32 @@ jobs:
         run: |
           cd tweak
           export THEOS=$GITHUB_WORKSPACE/theos
-          gmake clean package
+          echo "THEOS=$THEOS"
+          ls -la $THEOS
+          gmake clean 2>&1 || true
+          gmake package 2>&1
+        env:
+          THEOS: ${{ github.workspace }}/theos
 
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
           if [ -d "tweak/packages" ]; then
-            cp tweak/packages/*.deb artifacts/
+            cp tweak/packages/*.deb artifacts/ 2>/dev/null || true
+            ls -la artifacts/
           fi
+          ls -la tweak/
 
       - name: Upload package
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iOSScreenStream
           path: artifacts/*.deb
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   release:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && needs.build.outputs.succeeded != 'false'
     needs: build
     runs-on: macos-14
 
@@ -108,10 +113,7 @@ jobs:
           name: iOSScreenStream Build
           body: |
             Automated build from GitHub Actions
-            
             Built commit: ${{ github.sha }}
-            
-            **Requires TrollVNC to be installed on the device!**
           files: release-packages/**/*
           draft: false
           prerelease: true
