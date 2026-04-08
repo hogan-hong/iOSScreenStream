@@ -1,18 +1,18 @@
-THEOS_DEVICE_IP = localhost
-THEOS_DEVICE_PORT = 2222
-THEOS_MAKE_PATH = $(THEOS)/makefiles
+THEOS_DEVICE_IP ?= localhost
+THEOS_DEVICE_PORT ?= 2222
 
-PACKAGE_NAME = com.yourname.iosscreenstream
-PACKAGE_VERSION = 1.0.0
-PACKAGE_ARCH = iphoneos-arm
-PKG_DEBIAN = com.yourname.iosscreenstream
+PACKAGE_NAME := com.yourname.iosscreenstream
+PACKAGE_VERSION := 1.0.0
+PACKAGE_ARCH := iphoneos-arm
+PKG_DEBIAN := com.yourname.iosscreenstream
 
-# Include paths
-TWEAK_NAME = iOSScreenStream
-iOSScreenStream_CFLAGS = -fobjc-arc -O3 -I$(THEOS_INCLUDE_PATH)/TrollVNC -I./include
-iOSScreenStream_FILES = $(wildcard src/*.mm)
-iOSScreenStream_LDFLAGS = -undefined dynamic_lookup
+include $(THEOS)/makefiles/common.mk
 
-# Theos standard
-include $(THEOS_MAKE_PATH)/package.mk
-include $(THEOS_MAKE_PATH)/tweak.mk
+TWEAK_NAME := iOSScreenStream
+iOSScreenStream_CFLAGS := -fobjc-arc -O3
+iOSScreenStream_CFLAGS += -I$(THEOS_INCLUDE_PATH)/TrollVNC -I./include
+iOSScreenStream_FILES := $(wildcard src/*.mm)
+iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
+
+include $(THEOS)/makefiles/package.mk
+include $(THEOS)/makefiles/tweak.mk
