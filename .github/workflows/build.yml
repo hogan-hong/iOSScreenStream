@@ -9,6 +9,9 @@ env:
   FINALPACKAGE: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+  THEOS: ${{ github.workspace }}/theos
+  THEOS_DEVICE_IP: 127.0.0.1
+  THEOS_DEVICE_PORT: 58422
 
 jobs:
   build:
@@ -51,7 +54,6 @@ jobs:
 
       - name: Install iOS SDKs
         run: |
-          export THEOS=$GITHUB_WORKSPACE/theos
           cd theos
           ./bin/install-sdk iPhoneOS16.5
           ./bin/install-sdk iPhoneOS14.5
@@ -66,22 +68,23 @@ jobs:
       - name: Build package
         run: |
           cd tweak
+          pwd
+          ls -la
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
-          ls -la $THEOS
-          gmake clean 2>&1 || true
+          ls -la $THEOS/makefiles/ 2>/dev/null | head -5
+          include $(THEOS)/makefiles/common.mk
           gmake package 2>&1
-        env:
-          THEOS: ${{ github.workspace }}/theos
+        shell: bash
 
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
           if [ -d "tweak/packages" ]; then
-            cp tweak/packages/*.deb artifacts/ 2>/dev/null || true
-            ls -la artifacts/
+            ls -la tweak/packages/
+            cp tweak/packages/*.deb artifacts/ 2>/dev/null || echo "No deb found"
           fi
-          ls -la tweak/
+          ls -la artifacts/ 2>/dev/null || echo "No artifacts"
 
       - name: Upload package
         if: always()
@@ -89,12 +92,13 @@ jobs:
         with:
           name: iOSScreenStream
           path: artifacts/*.deb
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   release:
-    if: github.event_name == 'workflow_dispatch' && needs.build.outputs.succeeded != 'false'
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: macos-14
+    if: ${{ needs.build.result == 'success' }}
 
     steps:
       - name: Checkout repository
