@@ -11,10 +11,14 @@ env:
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
   THEOS_DEVICE_IP: 127.0.0.1
   THEOS_DEVICE_PORT: 58422
+  THEOS: ${{ github.workspace }}/theos
 
 jobs:
   build:
     runs-on: macos-14
+    defaults:
+      run:
+        working-directory: tweak
 
     steps:
       - name: Checkout repository
@@ -54,11 +58,9 @@ jobs:
       - name: Install iOS SDKs (with fallback)
         run: |
           cd theos
-          # Try to install SDKs, but don't fail if they can't be installed
-          ./bin/install-sdk iPhoneOS16.5 2>&1 || echo "SDK installation failed, continuing..."
-          ./bin/install-sdk iPhoneOS14.5 2>&1 || echo "SDK installation failed, continuing..."
-          # Check if SDKs exist
-          ls -la sdks/ 2>/dev/null || echo "No sdks directory"
+          ./bin/install-sdk iPhoneOS16.5 2>&1 || echo "SDK 16.5 failed, continuing..."
+          ./bin/install-sdk iPhoneOS14.5 2>&1 || echo "SDK 14.5 failed, continuing..."
+          ls -la sdks/ 2>/dev/null || echo "No sdks dir"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,24 +71,23 @@ jobs:
 
       - name: Build package
         run: |
-          cd tweak
           pwd
           ls -la
-          export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
           ls -la $THEOS/makefiles/ 2>/dev/null | head -5
           ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
-          $(THEOS)/bin/gmake package 2>&1
-        shell: bash
+          gmake package 2>&1
+        env:
+          THEOS: ${{ github.workspace }}/theos
 
       - name: Prepare artifacts
         run: |
-          mkdir -p artifacts
-          if [ -d "tweak/packages" ]; then
-            ls -la tweak/packages/
-            cp tweak/packages/*.deb artifacts/ 2>/dev/null || echo "No deb found"
+          mkdir -p ../artifacts
+          if [ -d "packages" ]; then
+            ls -la packages/
+            cp packages/*.deb ../artifacts/ 2>/dev/null || echo "No deb"
           fi
-          ls -la artifacts/ 2>/dev/null || echo "No artifacts dir"
+          ls -la ../artifacts/
 
       - name: Upload package
         if: always()
