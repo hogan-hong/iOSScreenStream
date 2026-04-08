@@ -51,11 +51,14 @@ jobs:
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
           cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
 
-      - name: Install iOS SDKs
+      - name: Install iOS SDKs (with fallback)
         run: |
           cd theos
-          ./bin/install-sdk iPhoneOS16.5
-          ./bin/install-sdk iPhoneOS14.5
+          # Try to install SDKs, but don't fail if they can't be installed
+          ./bin/install-sdk iPhoneOS16.5 2>&1 || echo "SDK installation failed, continuing..."
+          ./bin/install-sdk iPhoneOS14.5 2>&1 || echo "SDK installation failed, continuing..."
+          # Check if SDKs exist
+          ls -la sdks/ 2>/dev/null || echo "No sdks directory"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -72,7 +75,8 @@ jobs:
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
           ls -la $THEOS/makefiles/ 2>/dev/null | head -5
-          $(THEOS)/bin/gake package 2>&1 || gmake package 2>&1
+          ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
+          $(THEOS)/bin/gmake package 2>&1
         shell: bash
 
       - name: Prepare artifacts
