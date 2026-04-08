@@ -2,6 +2,13 @@
 
 Low-latency iOS screen streaming with reverse touch control for jailbroken devices.
 
+## Features
+
+- **Low-latency**: Uses IOSurface + VideoToolbox hardware H.264 encoding
+- **Touch control**: Full touch event injection via TCP (using TrollVNC's STHIDEventGenerator)
+- **Efficient**: UDP multicast for video, TCP for control
+- **Settings UI**: Built-in preference panel in iOS Settings
+
 ## Architecture
 
 ```
@@ -18,65 +25,91 @@ Low-latency iOS screen streaming with reverse touch control for jailbroken devic
 │  │ H.264       │    TCP          │  Coordinate Mapping  ││
 │  │ Encoder     │                 └──────────────────────┘│
 │  └──────────────┘                                         │
-│         │                                                  │
-│  ┌──────▼──────┐    Touch         ┌──────────────────────┐│
-│  │ STHIDEvent  │ ◄─────────────── │  Touch Injection    ││
-│  │ Generator   │                 │  (Same as TrollVNC)  ││
-│  └─────────────┘                 └──────────────────────┘│
 └─────────────────────────────────────────────────────────────┘
 ```
-
-## Features
-
-- **Low-latency**: Uses IOSurface + VideoToolbox hardware H.264 encoding
-- **Multi-device**: Supports multiple iOS devices simultaneously
-- **Touch control**: Full touch event injection via TCP
-- **Efficient**: UDP multicast for video, TCP for control
 
 ## Requirements
 
 ### iOS Side
 - Jailbroken iOS device (iOS 14-15, unc0ver)
+- **TrollVNC must be installed** (provides STHIDEventGenerator for touch injection)
 - Theos for building
-- Dependencies from TrollVNC (same screen capture APIs)
 
 ### PC Side
 - Python 3.8+
 - FFmpeg (for decoding)
 - numpy, opencv-python
 
-## Quick Start
+## Building
 
-### 1. Build iOS Tweak
+### 1. Copy TrollVNC's Touch Injection Files
+
+This tweak depends on TrollVNC's STHIDEventGenerator for touch events. Copy these files from your TrollVNC repository:
+
+```bash
+# From TrollVNC source to iOSScreenStream
+cp TrollVNC/src/STHIDEventGenerator.h tweak/include/
+cp TrollVNC/src/STHIDEventGenerator.mm tweak/src/
+```
+
+### 2. Build with Theos
 
 ```bash
 cd tweak
 make package
-# Install resulting .deb to your iOS device
 ```
 
-### 2. Configure iOS Tweak
+The resulting .deb file will be in `./packages/`
 
-Edit `/Library/PreferenceLoader/Preferences/iOSScreenStream.plist`:
-- Set `ServerIP` to your PC's IP
-- Set `VideoPort` (default: 5001)
-- Set `ControlPort` (default: 5002)
-- Enable `Enabled` to start streaming
+### 3. Install
 
-### 3. Run PC Client
+Copy the .deb to your iOS device and install via:
+- Filza File Manager
+- Or `dpkg -i com.yourname.iosscreenstream_1.0.0-1_iphoneos-arm.deb`
+
+## Configuration
+
+After installation, go to **Settings > iOSScreenStream** to configure:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| 启用服务 | YES | Enable/disable streaming |
+| 电脑 IP 地址 | 192.168.1.100 | Your PC's IP |
+| 视频端口 (UDP) | 5001 | UDP port for video stream |
+| 控制端口 (TCP) | 5002 | TCP port for touch control |
+| 帧率 (FPS) | 30 | Target frame rate |
+| 码率 (kbps) | 2000 | Video bitrate |
+
+## Running the PC Client
 
 ```bash
 cd pc
 pip install -r requirements.txt
-python stream_client.py --video-port 5001 --control-port 5002 --device-name "iPhone-1"
+
+# Single device
+python stream_client.py --ios-ip 192.168.1.101 --video-port 5001 --control-port 5002
+
+# Multiple devices
+python multi_client.py --devices 5
 ```
+
+## Multi-Device Setup
+
+For 5 devices, configure each iPhone with different ports:
+
+| Device | Video Port | Control Port |
+|--------|-----------|-------------|
+| iPhone 1 | 5001 | 5002 |
+| iPhone 2 | 5003 | 5004 |
+| iPhone 3 | 5005 | 5006 |
+| iPhone 4 | 5007 | 5008 |
+| iPhone 5 | 5009 | 5010 |
 
 ## Protocol
 
 ### Video Stream (UDP)
-- H.264 NAL units sent via raw UDP
-- Each packet: 4 bytes length (big-endian) + NAL data
-- PPS/SPS sent on connect before I-frame
+- H.264 NAL units in length-prefixed format (4 bytes length + NAL data)
+- Each device uses its own UDP port
 
 ### Control Stream (TCP)
 - JSON messages, one per line
@@ -85,7 +118,8 @@ python stream_client.py --video-port 5001 --control-port 5002 --device-name "iPh
 
 ## Based on
 
-This project uses screen capture code from [TrollVNC](https://github.com/hogan-hong/TrollVNC) by 82Flex.
+- Screen capture code from [TrollVNC](https://github.com/hogan-hong/TrollVNC) by 82Flex
+- Touch injection via TrollVNC's STHIDEventGenerator
 
 ## License
 
