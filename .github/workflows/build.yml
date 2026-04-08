@@ -52,13 +52,12 @@ jobs:
           cp -r trollvnc/include-spi/* theos/include/ 2>/dev/null || true
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
           cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
-          ls -la trollvnc/src/
 
-      - name: Install iOS SDKs (with fallback)
+      - name: Install iOS SDKs
         run: |
           cd theos
-          ./bin/install-sdk iPhoneOS16.5 2>&1 || echo "SDK 16.5 failed, continuing..."
-          ./bin/install-sdk iPhoneOS14.5 2>&1 || echo "SDK 14.5 failed, continuing..."
+          ./bin/install-sdk iPhoneOS16.5 || echo "SDK 16.5 failed"
+          ./bin/install-sdk iPhoneOS14.5 || echo "SDK 14.5 failed"
           ls -la sdks/ 2>/dev/null || echo "No sdks dir"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,9 +74,12 @@ jobs:
           ls -la
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
-          ls -la $THEOS/makefiles/ 2>/dev/null | head -5
+          echo "Checking Theos structure..."
+          ls -la $THEOS/
+          ls -la $THEOS/makefiles/ 2>/dev/null | head -10
           ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
-          gmake package 2>&1
+          echo "Starting build..."
+          gmake package 2>&1 | tee ../build.log
         env:
           THEOS: ${{ github.workspace }}/theos
 
@@ -86,17 +88,20 @@ jobs:
           mkdir -p artifacts
           cd tweak
           if [ -d "packages" ]; then
-            ls -la packages/
-            cp packages/*.deb ../artifacts/ 2>/dev/null || echo "No deb"
+            cp packages/*.deb ../artifacts/ 2>/dev/null && echo "Copied deb" || echo "No deb found"
           fi
-          ls -la ../artifacts/
+          cd ..
+          if [ -f "build.log" ]; then
+            cp build.log artifacts/
+          fi
+          ls -la artifacts/
 
       - name: Upload package
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iOSScreenStream
-          path: artifacts/*.deb
+          path: artifacts/**
           if-no-files-found: warn
 
   release:
