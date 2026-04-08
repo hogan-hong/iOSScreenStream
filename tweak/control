@@ -1,0 +1,9 @@
+Package: com.yourname.iosscreenstream
+Name: iOSScreenStream
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Low-latency iOS screen streaming with reverse touch control
+Maintainer: Your Name <your@email.com>
+Author: Your Name <your@email.com>
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000), com.82flex.trollvnc (>= 1.0.0)
