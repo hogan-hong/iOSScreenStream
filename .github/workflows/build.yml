@@ -9,7 +9,6 @@ env:
   FINALPACKAGE: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
-  THEOS: ${{ github.workspace }}/theos
   THEOS_DEVICE_IP: 127.0.0.1
   THEOS_DEVICE_PORT: 58422
 
@@ -73,8 +72,7 @@ jobs:
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
           ls -la $THEOS/makefiles/ 2>/dev/null | head -5
-          include $(THEOS)/makefiles/common.mk
-          gmake package 2>&1
+          $(THEOS)/bin/gake package 2>&1 || gmake package 2>&1
         shell: bash
 
       - name: Prepare artifacts
@@ -84,7 +82,7 @@ jobs:
             ls -la tweak/packages/
             cp tweak/packages/*.deb artifacts/ 2>/dev/null || echo "No deb found"
           fi
-          ls -la artifacts/ 2>/dev/null || echo "No artifacts"
+          ls -la artifacts/ 2>/dev/null || echo "No artifacts dir"
 
       - name: Upload package
         if: always()
@@ -95,10 +93,9 @@ jobs:
           if-no-files-found: warn
 
   release:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     needs: build
     runs-on: macos-14
-    if: ${{ needs.build.result == 'success' }}
 
     steps:
       - name: Checkout repository
