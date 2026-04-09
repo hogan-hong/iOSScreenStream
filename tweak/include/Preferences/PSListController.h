@@ -1,5 +1,5 @@
-// Stub for PreferenceLoader/Preferences.h
-// Maps to the Preferences framework from PreferenceLoader package
+// Stub for Preferences/PSListController.h
+// Used by ISSPrefsRootListController
 
 #import <Foundation/Foundation.h>
 
