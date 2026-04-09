@@ -69,7 +69,7 @@
     TVLog(@"Starting stream...");
     
     // Get screen dimensions
-    CGSize screenSize = [[UIScreen mainScreen] _unjailedReferenceBoundsInPixels].size;
+    CGSize screenSize = [UIScreen mainScreen].nativeBounds.size;
     int width = (int)screenSize.width;
     int height = (int)screenSize.height;
     
