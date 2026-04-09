@@ -53,19 +53,20 @@ jobs:
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
           cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
 
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+
       - name: Install iOS SDKs
         run: |
-          cd theos
+          export THEOS=$GITHUB_WORKSPACE/theos
+          cd $THEOS
           ./bin/install-sdk iPhoneOS16.5 || echo "SDK 16.5 failed"
           ./bin/install-sdk iPhoneOS14.5 || echo "SDK 14.5 failed"
           ls -la sdks/ 2>/dev/null || echo "No sdks dir"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: "16.2"
 
       - name: Build package
         run: |
