@@ -36,12 +36,6 @@ jobs:
         with:
           repository: hogan-hong/TrollVNC
           path: trollvnc
-          sparse-checkout: |
-            src/STHIDEventGenerator.h
-            src/STHIDEventGenerator.mm
-            src/Control.h
-            include-spi
-            include
 
       - name: Copy TrollVNC headers and source
         run: |
