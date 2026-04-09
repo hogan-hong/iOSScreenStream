@@ -6,7 +6,7 @@ PACKAGE_VERSION := 1.0.0
 PACKAGE_ARCH := iphoneos-arm
 PKG_DEBIAN := com.yourname.iosscreenstream
 
-TARGET = iphone:14.0
+TARGET = iphone:14.5
 
 include $(THEOS)/makefiles/common.mk
 
