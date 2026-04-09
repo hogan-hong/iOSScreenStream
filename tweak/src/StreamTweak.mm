@@ -4,7 +4,6 @@
 
 #import <UIKit/UIKit.h>
 #import <PreferenceLoader/Preferences.h>
-#import <libactivator/libactivator.h>
 
 #import "StreamTweak.h"
 #import "ScreenCapturer.h"
