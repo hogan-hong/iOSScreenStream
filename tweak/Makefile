@@ -6,6 +6,8 @@ PACKAGE_VERSION := 1.0.0
 PACKAGE_ARCH := iphoneos-arm
 PKG_DEBIAN := com.yourname.iosscreenstream
 
+TARGET = iPhoneOS:14.0
+
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME := iOSScreenStream

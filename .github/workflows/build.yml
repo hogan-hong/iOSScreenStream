@@ -79,7 +79,14 @@ jobs:
           ls -la $THEOS/makefiles/ 2>/dev/null | head -10
           ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
           echo "Starting build..."
+          set -o pipefail
           gmake package 2>&1 | tee ../build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          echo "Build exit code: $BUILD_EXIT_CODE"
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "Build failed with exit code $BUILD_EXIT_CODE"
+            exit 1
+          fi
         env:
           THEOS: ${{ github.workspace }}/theos
 
@@ -108,6 +115,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
     needs: build
     runs-on: macos-14
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
