@@ -39,6 +39,7 @@ jobs:
           sparse-checkout: |
             src/STHIDEventGenerator.h
             src/STHIDEventGenerator.mm
+            src/Control.h
             include-spi
             include
 
