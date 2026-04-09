@@ -82,10 +82,14 @@
     // Profile Level
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_Main_AutoLevel);
     
-    // Data rate limits (for constant quality)
+    // Data rate limits (for constant quality) - DataRateLimits expects CFArray[2] of CFNumberRef (bytes/sec)
     int64_t dataRateLimitBytesPerSec = mBitrate / 8;
-    CFNumberRef dataRateLimit = (__bridge CFNumberRef)@(@(dataRateLimitBytesPerSec).unsignedLongLong);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_DataRateLimits, (__bridge CFArrayRef)@[@(dataRateLimitBytesPerSec * 2), dataRateLimit]);
+    CFNumberRef dataRateLimits[2];
+    dataRateLimits[0] = (__bridge CFNumberRef)[NSNumber numberWithLongLong:dataRateLimitBytesPerSec * 2];
+    dataRateLimits[1] = (__bridge CFNumberRef)[NSNumber numberWithLongLong:dataRateLimitBytesPerSec];
+    CFArrayRef dataRateLimitsArray = CFArrayCreate(NULL, (const void **)dataRateLimits, 2, &kCFTypeArrayCallBacks);
+    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_DataRateLimits, dataRateLimitsArray);
+    CFRelease(dataRateLimitsArray);
     
     // Start encoding
     status = VTCompressionSessionPrepareToEncodeFrames(mSession);
@@ -101,7 +105,7 @@
 - (void)stopEncoding {
     if (!mIsEncoding) return;
     
-    VTCompressionSessionCompleteFrames(mSession, 0);
+    VTCompressionSessionCompleteFrames(mSession, kCMTimeInvalid);
     CFRelease(mSession);
     mSession = NULL;
     mIsEncoding = NO;
@@ -139,8 +143,8 @@
     CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, false);
     BOOL isKeyFrame = YES;
     if (attachments && CFArrayGetCount(attachments) > 0) {
-        CFDictionaryRef attachment = CFArrayGetValueAtIndex(attachments, 0);
-        CFBooleanRef notSync = CFDictionaryGetValue(attachment, kCMSampleAttachmentKey_NotSync);
+        CFDictionaryRef attachment = (CFDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
+        CFBooleanRef notSync = (CFBooleanRef)CFDictionaryGetValue(attachment, kCMSampleAttachmentKey_NotSync);
         isKeyFrame = !(notSync && CFBooleanGetValue(notSync));
     }
     
