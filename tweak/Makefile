@@ -11,7 +11,7 @@ TARGET = iphone:14.5
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME := iOSScreenStream
-iOSScreenStream_CFLAGS := -fobjc-arc -O3
+iOSScreenStream_CFLAGS := -fobjc-arc -O3 -Wno-unknown-warning-option
 iOSScreenStream_CFLAGS += -I$(THEOS_INCLUDE_PATH)/TrollVNC -I./include
 iOSScreenStream_FILES := $(wildcard src/*.mm)
 iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
