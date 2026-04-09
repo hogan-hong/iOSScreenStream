@@ -27,14 +27,6 @@
 }
 
 - (void)touchMoveToPoint:(CGPoint)point {
-    // For move events, TrollVNC uses touchDown with move
-    // We need to track touch state for multi-touch
-    static NSMutableSet *activeTouches = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        activeTouches = [NSMutableSet set];
-    });
-    
     // STHIDEventGenerator doesn't have a direct move method
     // We use the event stream approach
     NSDictionary *eventInfo = @{
