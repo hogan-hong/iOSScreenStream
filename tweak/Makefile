@@ -21,15 +21,16 @@ iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
 BUNDLE_NAME := iOSScreenStreamPrefs
 iOSScreenStreamPrefs_INSTALL_PATH = /Library/PreferenceBundles
 iOSScreenStreamPrefs_CFLAGS := -fobjc-arc
-iOSScreenStreamPrefs_FILES := Resources/ISSPrefsRootListController.mm
-iOSScreenStreamPrefs_LDFLAGS := -framework Foundation -framework UIKit -framework CoreFoundation
+iOSScreenStreamPrefs_FILES := prefs/ISSPrefsRootListController.mm
+iOSScreenStreamPrefs_LDFLAGS := -undefined dynamic_lookup
+iOSScreenStreamPrefs_LDFLAGS += -framework Foundation -framework UIKit -framework CoreFoundation
 iOSScreenStreamPrefs_BUNDLE_EXTENSION = bundle
 
-include $(THEOS)/makefiles/tweak.mk
-include $(THEOS)/makefiles/bundle.mk
-include $(THEOS)/makefiles/package.mk
+include $(THEOS_MAKE_PATH)/tweak.mk
+include $(THEOS_MAKE_PATH)/bundle.mk
+include $(THEOS_MAKE_PATH)/package.mk
 
 # ===== 将 entry.plist 安装到 PreferenceLoader 目录 =====
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences$(ECHO_END)
-	$(ECHO_NOTHING)cp Resources/entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.plist$(ECHO_END)
+	$(ECHO_NOTHING)cp entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.plist$(ECHO_END)
