@@ -1,6 +1,6 @@
 /*
  * iOSScreenStream - 设置页面控制器
- * 修改：包名更正、应用按钮通知 tweak 重新加载
+ * 使用 Root.plist 静态定义 specifiers，控制器只处理动态逻辑
  */
 
 #import <Foundation/Foundation.h>
@@ -12,29 +12,7 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 
-// Preferences 框架私有 API 声明（数值常量）
-// 这些在运行时由 Preferences.framework 提供
-typedef NS_ENUM(NSInteger, PSCellType) {
-    kPSCellTypeSwitch = 2,
-    kPSCellTypeTextField = 3,
-    kPSCellTypeSlider = 4,
-    kPSCellTypeButton = 5,
-    kPSCellTypeLabel = 6
-};
-
-// PSSpecifier 运行时接口（动态查找，不依赖编译时头文件）
-@interface PSSpecifier : NSObject
-+ (instancetype)groupSpecifierWithIdentifier:(NSString *)identifier;
-+ (instancetype)separatorSpecifier;
-+ (instancetype)preferenceSpecifierNamed:(NSString *)name target:(id)target set:(SEL)set get:(SEL)get detail:(Class)detail cell:(NSInteger)cell edit:(NSInteger)edit;
-- (void)setProperty:(id)value forKey:(NSString *)key;
-- (id)propertyForKey:(NSString *)key;
-@end
-
-// PSListController 运行时接口
 @interface PSListController : UIViewController
-- (NSArray *)specifiers;
-- (void)setSpecifiers:(NSArray *)specifiers;
 @end
 
 @interface ISSPrefsRootListController : PSListController
@@ -43,7 +21,8 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 #define PREFS_ID @"com.hogan.iosscreenstream"
 #define kSettingsChangedNotification "com.hogan.iosscreenstream.settingsChanged"
 
-NSString *GetDeviceIPAddress(void) {
+// 获取本机 WiFi IP
+static NSString *GetDeviceIPAddress(void) {
     struct ifaddrs *ifaList = NULL;
     if (getifaddrs(&ifaList) != 0 || !ifaList)
         return @"未获取到";
@@ -77,14 +56,16 @@ NSString *GetDeviceIPAddress(void) {
 
 @implementation ISSPrefsRootListController
 
+// 读取偏好值（PSListController 通过 selector 调用）
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
+    // 本机 IP 动态获取
+    if ([[specifier propertyForKey:@"key"] isEqualToString:@"deviceIP"]) {
+        return GetDeviceIPAddress();
+    }
+
     NSString *key = [specifier propertyForKey:@"key"];
     NSString *defaultsDomain = [specifier propertyForKey:@"defaults"];
     id defaultValue = [specifier propertyForKey:@"default"];
-
-    if ([key isEqualToString:@"deviceIP"]) {
-        return GetDeviceIPAddress();
-    }
 
     if (defaultsDomain && key) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:defaultsDomain];
@@ -95,6 +76,7 @@ NSString *GetDeviceIPAddress(void) {
     return defaultValue;
 }
 
+// 写入偏好值
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     NSString *defaultsDomain = [specifier propertyForKey:@"defaults"];
@@ -106,152 +88,7 @@ NSString *GetDeviceIPAddress(void) {
     }
 }
 
-- (NSArray *)specifiers {
-    NSArray *current = [super specifiers];
-    if (!current || [current count] == 0) {
-        NSMutableArray *specs = [NSMutableArray array];
-
-        // 头部说明
-        PSSpecifier *header = [PSSpecifier groupSpecifierWithIdentifier:@"header"];
-        [header setProperty:@"iOSScreenStream v1.1.0\n低延迟屏幕流传输与反向触控" forKey:@"footerText"];
-        [specs addObject:header];
-
-        // 启用开关
-        PSSpecifier *enabled = [PSSpecifier preferenceSpecifierNamed:@"启用服务"
-                                                              target:self
-                                                               set:@selector(setPreferenceValue:specifier:)
-                                                               get:@selector(readPreferenceValue:)
-                                                            detail:Nil
-                                                              cell:kPSCellTypeSwitch
-                                                              edit:0];
-        [enabled setProperty:@YES forKey:@"default"];
-        [enabled setProperty:PREFS_ID forKey:@"defaults"];
-        [enabled setProperty:@"enabled" forKey:@"key"];
-        [specs addObject:enabled];
-
-        [specs addObject:[PSSpecifier separatorSpecifier]];
-
-        // 连接设置
-        PSSpecifier *connGroup = [PSSpecifier groupSpecifierWithIdentifier:@"connection"];
-        [connGroup setProperty:@"连接设置" forKey:@"name"];
-        [specs addObject:connGroup];
-
-        // 电脑 IP
-        PSSpecifier *serverIP = [PSSpecifier preferenceSpecifierNamed:@"电脑 IP 地址"
-                                                            target:self
-                                                             set:@selector(setPreferenceValue:specifier:)
-                                                             get:@selector(readPreferenceValue:)
-                                                          detail:Nil
-                                                             cell:kPSCellTypeTextField
-                                                             edit:0];
-        [serverIP setProperty:@"serverIP" forKey:@"key"];
-        [serverIP setProperty:PREFS_ID forKey:@"defaults"];
-        [serverIP setProperty:@"192.168.1.100" forKey:@"default"];
-        [serverIP setProperty:@"Keyboard" forKey:@"keyboard"];
-        [serverIP setProperty:@"url" forKey:@"keyboardType"];
-        [specs addObject:serverIP];
-
-        // 视频端口
-        PSSpecifier *videoPort = [PSSpecifier preferenceSpecifierNamed:@"视频端口 (UDP)"
-                                                              target:self
-                                                               set:@selector(setPreferenceValue:specifier:)
-                                                               get:@selector(readPreferenceValue:)
-                                                            detail:Nil
-                                                               cell:kPSCellTypeTextField
-                                                               edit:0];
-        [videoPort setProperty:@"videoPort" forKey:@"key"];
-        [videoPort setProperty:PREFS_ID forKey:@"defaults"];
-        [videoPort setProperty:@5001 forKey:@"default"];
-        [videoPort setProperty:@"Keyboard" forKey:@"keyboard"];
-        [videoPort setProperty:@"number" forKey:@"keyboardType"];
-        [specs addObject:videoPort];
-
-        // 控制端口
-        PSSpecifier *controlPort = [PSSpecifier preferenceSpecifierNamed:@"控制端口 (TCP)"
-                                                                target:self
-                                                                 set:@selector(setPreferenceValue:specifier:)
-                                                                 get:@selector(readPreferenceValue:)
-                                                              detail:Nil
-                                                                 cell:kPSCellTypeTextField
-                                                                 edit:0];
-        [controlPort setProperty:@"controlPort" forKey:@"key"];
-        [controlPort setProperty:PREFS_ID forKey:@"defaults"];
-        [controlPort setProperty:@5002 forKey:@"default"];
-        [controlPort setProperty:@"Keyboard" forKey:@"keyboard"];
-        [controlPort setProperty:@"number" forKey:@"keyboardType"];
-        [specs addObject:controlPort];
-
-        // 本机 IP（只读）
-        PSSpecifier *deviceIP = [PSSpecifier preferenceSpecifierNamed:@"本机 IP 地址"
-                                                              target:self
-                                                               set:nil
-                                                               get:@selector(readPreferenceValue:)
-                                                            detail:Nil
-                                                              cell:kPSCellTypeLabel
-                                                              edit:0];
-        [deviceIP setProperty:@"deviceIP" forKey:@"key"];
-        [deviceIP setProperty:@"只读" forKey:@"default"];
-        [specs addObject:deviceIP];
-
-        [specs addObject:[PSSpecifier separatorSpecifier]];
-
-        // 视频质量
-        PSSpecifier *videoGroup = [PSSpecifier groupSpecifierWithIdentifier:@"video"];
-        [videoGroup setProperty:@"视频质量" forKey:@"name"];
-        [specs addObject:videoGroup];
-
-        // 帧率
-        PSSpecifier *fps = [PSSpecifier preferenceSpecifierNamed:@"帧率 (FPS)"
-                                                         target:self
-                                                          set:@selector(setPreferenceValue:specifier:)
-                                                          get:@selector(readPreferenceValue:)
-                                                       detail:Nil
-                                                          cell:kPSCellTypeSlider
-                                                          edit:0];
-        [fps setProperty:@"fps" forKey:@"key"];
-        [fps setProperty:PREFS_ID forKey:@"defaults"];
-        [fps setProperty:@30 forKey:@"default"];
-        [fps setProperty:@10 forKey:@"min"];
-        [fps setProperty:@60 forKey:@"max"];
-        [fps setProperty:@1 forKey:@"step"];
-        [specs addObject:fps];
-
-        // 码率
-        PSSpecifier *bitrate = [PSSpecifier preferenceSpecifierNamed:@"码率 (kbps)"
-                                                            target:self
-                                                             set:@selector(setPreferenceValue:specifier:)
-                                                             get:@selector(readPreferenceValue:)
-                                                          detail:Nil
-                                                             cell:kPSCellTypeSlider
-                                                             edit:0];
-        [bitrate setProperty:@"bitrate" forKey:@"key"];
-        [bitrate setProperty:PREFS_ID forKey:@"defaults"];
-        [bitrate setProperty:@2000 forKey:@"default"];
-        [bitrate setProperty:@500 forKey:@"min"];
-        [bitrate setProperty:@10000 forKey:@"max"];
-        [bitrate setProperty:@100 forKey:@"step"];
-        [specs addObject:bitrate];
-
-        [specs addObject:[PSSpecifier separatorSpecifier]];
-
-        // 应用按钮
-        PSSpecifier *apply = [PSSpecifier preferenceSpecifierNamed:@"应用更改"
-                                                           target:self
-                                                            set:nil
-                                                            get:nil
-                                                         detail:Nil
-                                                            cell:kPSCellTypeButton
-                                                            edit:0];
-        [apply setProperty:NSStringFromSelector(@selector(applyChanges)) forKey:@"action"];
-        [apply setProperty:@YES forKey:@"isDestructive"];
-        [specs addObject:apply];
-
-        [self setSpecifiers:specs];
-        current = specs;
-    }
-    return current;
-}
-
+// "应用更改" 按钮回调
 - (void)applyChanges {
     [self.view endEditing:YES];
 
@@ -262,16 +99,14 @@ NSString *GetDeviceIPAddress(void) {
         NULL, NULL, YES
     );
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已应用"
-                                                                   message:@"设置已生效，无需重启"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"已应用"
+                        message:@"设置已生效，无需重启"
+                 preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好"
+                                              style:UIAlertActionStyleDefault
+                                            handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.title = @"iOSScreenStream";
 }
 
 @end
