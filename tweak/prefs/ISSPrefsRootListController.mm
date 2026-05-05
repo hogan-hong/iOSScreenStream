@@ -33,8 +33,8 @@ typedef NS_ENUM(NSInteger, PSCellType) {
 
 // PSListController 运行时接口
 @interface PSListController : UIViewController
-@property (nonatomic, retain) NSArray *_specifiers;
 - (NSArray *)specifiers;
+- (void)setSpecifiers:(NSArray *)specifiers;
 @end
 
 @interface ISSPrefsRootListController : PSListController
@@ -107,7 +107,8 @@ NSString *GetDeviceIPAddress(void) {
 }
 
 - (NSArray *)specifiers {
-    if (!_specifiers) {
+    NSArray *current = [super specifiers];
+    if (!current) {
         NSMutableArray *specs = [NSMutableArray array];
 
         // 头部说明
@@ -241,13 +242,14 @@ NSString *GetDeviceIPAddress(void) {
                                                          detail:Nil
                                                             cell:kPSCellTypeButton
                                                             edit:0];
-        [apply setProperty:@selector(applyChanges) forKey:@"action"];
+        [apply setProperty:NSStringFromSelector(@selector(applyChanges)) forKey:@"action"];
         [apply setProperty:@YES forKey:@"isDestructive"];
         [specs addObject:apply];
 
-        _specifiers = specs;
+        [self setSpecifiers:specs];
+        current = specs;
     }
-    return _specifiers;
+    return current;
 }
 
 - (void)applyChanges {
