@@ -93,16 +93,24 @@ jobs:
 
       - name: 准备产物
         run: |
-          mkdir -p artifacts
+          mkdir -p artifacts/pc
+          # deb 包
           cd tweak
           if [ -d "packages" ]; then
             cp packages/*.deb ../artifacts/ 2>/dev/null && echo "deb 已复制" || echo "未找到 deb"
           fi
           cd ..
+          # PC 客户端
+          cp pc/stream_client.py artifacts/pc/
+          cp pc/multi_client.py artifacts/pc/
+          cp pc/requirements.txt artifacts/pc/
+          echo "PC 客户端已复制"
+          # 构建日志
           if [ -f "build.log" ]; then
             cp build.log artifacts/
           fi
-          ls -la artifacts/
+          echo "===== 产物列表 ====="
+          find artifacts/ -type f
 
       - name: 上传构建产物
         if: always()
