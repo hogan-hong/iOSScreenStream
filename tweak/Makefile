@@ -20,7 +20,7 @@ iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
 # ===== 偏好设置 Bundle =====
 BUNDLE_NAME := iOSScreenStreamPrefs
 iOSScreenStreamPrefs_INSTALL_PATH = /Library/PreferenceBundles
-iOSScreenStreamPrefs_CFLAGS := -fobjc-arc -I./include -I./include/Preferences -I./include/PreferenceLoader
+iOSScreenStreamPrefs_CFLAGS := -fobjc-arc
 iOSScreenStreamPrefs_FILES := Resources/ISSPrefsRootListController.mm
 iOSScreenStreamPrefs_LDFLAGS := -framework Foundation -framework UIKit -framework CoreFoundation
 iOSScreenStreamPrefs_BUNDLE_EXTENSION = bundle
