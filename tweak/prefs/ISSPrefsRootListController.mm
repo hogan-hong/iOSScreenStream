@@ -12,6 +12,8 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 
+@class PSSpecifier;
+
 @interface PSListController : UIViewController
 @end
 

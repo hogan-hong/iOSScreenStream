@@ -60,8 +60,8 @@ jobs:
         run: |
           export THEOS=$GITHUB_WORKSPACE/theos
           cd $THEOS
-          ./bin/install-sdk iPhoneOS16.5 || echo "SDK 16.5 安装失败"
-          ./bin/install-sdk iPhoneOS14.5 || echo "SDK 14.5 安装失败"
+          ./bin/install-sdk iPhoneOS16.5 > /dev/null 2>&1 || echo "SDK 16.5 安装失败"
+          ./bin/install-sdk iPhoneOS14.5 > /dev/null 2>&1 || echo "SDK 14.5 安装失败"
           ls -la sdks/ 2>/dev/null || echo "无 SDK 目录"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
