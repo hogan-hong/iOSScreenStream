@@ -10,6 +10,8 @@
         <string>PSLinkCell</string>
         <key>detail</key>
         <string>ISSPrefsRootListController</string>
+        <key>icon</key>
+        <string>iOSScreenStream.png</string>
         <key>isController</key>
         <true/>
         <key>label</key>

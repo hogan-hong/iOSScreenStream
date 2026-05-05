@@ -30,8 +30,9 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 include $(THEOS_MAKE_PATH)/package.mk
 
-# ===== 将 entry.plist 安装到 PreferenceLoader 目录 =====
+# ===== 将 entry.plist 和图标安装到 PreferenceLoader 目录 =====
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences$(ECHO_END)
 	$(ECHO_NOTHING)cp entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.plist$(ECHO_END)
+	$(ECHO_NOTHING)cp Icon.png $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.png$(ECHO_END)
 

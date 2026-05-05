@@ -18,6 +18,8 @@
 @end
 
 @interface PSListController : UIViewController
+- (NSArray *)specifiers;
+- (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
 @end
 
 @interface ISSPrefsRootListController : PSListController
@@ -61,9 +63,17 @@ static NSString *GetDeviceIPAddress(void) {
 
 @implementation ISSPrefsRootListController
 
-// 读取偏好值（PSListController 通过 selector 调用）
+// 显式加载 specifiers：确保 PSListController 能找到 Root.plist
+- (NSArray *)specifiers {
+    NSArray *specs = [super specifiers];
+    if (!specs || [specs count] == 0) {
+        specs = [self loadSpecifiersFromPlistName:@"Root" target:self];
+    }
+    return specs;
+}
+
+// 读取偏好值
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
-    // 本机 IP 动态获取
     if ([[specifier propertyForKey:@"key"] isEqualToString:@"deviceIP"]) {
         return GetDeviceIPAddress();
     }
@@ -97,7 +107,6 @@ static NSString *GetDeviceIPAddress(void) {
 - (void)applyChanges {
     [self.view endEditing:YES];
 
-    // 发送 Darwin 通知让 tweak 重新加载设置
     CFNotificationCenterPostNotification(
         CFNotificationCenterGetDarwinNotifyCenter(),
         CFSTR(kSettingsChangedNotification),
