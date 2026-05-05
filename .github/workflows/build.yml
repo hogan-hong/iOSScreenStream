@@ -71,23 +71,27 @@ jobs:
           cd tweak
           pwd
           ls -la
+          ls -la prefs/ 2>/dev/null || echo "无 prefs 目录"
+          ls -la Resources/ 2>/dev/null || echo "无 Resources 目录"
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
-          echo "检查 Theos 结构..."
-          ls -la $THEOS/
-          ls -la $THEOS/makefiles/ 2>/dev/null | head -10
-          ls -la $THEOS/sdks/ 2>/dev/null || echo "无 SDK"
           echo "开始构建..."
           set -o pipefail
           gmake package 2>&1 | tee ../build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           echo "构建退出码: $BUILD_EXIT_CODE"
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "构建失败，退出码: $BUILD_EXIT_CODE"
             echo "===== 构建日志末尾 ====="
-            tail -50 ../build.log
+            tail -80 ../build.log
             exit 1
           fi
+          # 验证 bundle 是否编译成功
+          echo "===== 验证 bundle ====="
+          find .theos/obj -name "*.bundle" -type d 2>/dev/null || echo "未找到 bundle 目录"
+          find .theos/obj -name "iOSScreenStreamPrefs*" 2>/dev/null || echo "未找到 Prefs 产物"
+          # 验证 staging 目录
+          echo "===== 验证 staging ====="
+          find .theos/_/Library -type f 2>/dev/null || echo "staging 目录为空"
         env:
           THEOS: ${{ github.workspace }}/theos
 
