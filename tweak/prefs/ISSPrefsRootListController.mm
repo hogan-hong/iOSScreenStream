@@ -108,7 +108,7 @@ NSString *GetDeviceIPAddress(void) {
 
 - (NSArray *)specifiers {
     NSArray *current = [super specifiers];
-    if (!current) {
+    if (!current || [current count] == 0) {
         NSMutableArray *specs = [NSMutableArray array];
 
         // 头部说明
