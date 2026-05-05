@@ -12,7 +12,10 @@
 #import <netinet/in.h>
 #import <arpa/inet.h>
 
-@class PSSpecifier;
+@interface PSSpecifier : NSObject
+- (id)propertyForKey:(NSString *)key;
+- (void)setProperty:(id)value forKey:(NSString *)key;
+@end
 
 @interface PSListController : UIViewController
 @end
