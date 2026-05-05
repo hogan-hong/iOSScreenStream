@@ -1,5 +1,5 @@
 /*
- * iOSScreenStream - Main tweak entry
+ * iOSScreenStream - 主 Tweak 入口
  */
 
 #import <Foundation/Foundation.h>

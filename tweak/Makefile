@@ -1,10 +1,10 @@
 THEOS_DEVICE_IP ?= localhost
 THEOS_DEVICE_PORT ?= 2222
 
-PACKAGE_NAME := com.yourname.iosscreenstream
-PACKAGE_VERSION := 1.0.0
+PACKAGE_NAME := com.hogan.iosscreenstream
+PACKAGE_VERSION := 1.1.0
 PACKAGE_ARCH := iphoneos-arm
-PKG_DEBIAN := com.yourname.iosscreenstream
+PKG_DEBIAN := com.hogan.iosscreenstream
 
 TARGET = iphone:14.5
 

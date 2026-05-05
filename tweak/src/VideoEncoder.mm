@@ -1,5 +1,6 @@
 /*
- * iOSScreenStream - VideoToolbox H.264 encoder
+ * iOSScreenStream - VideoToolbox H.264 编码器
+ * 修复：正确提取 NAL 单元（AVCC → Annex B），自动提取 SPS/PPS
  */
 
 #import <VideoToolbox/VideoToolbox.h>
@@ -16,9 +17,10 @@
     BOOL mIsEncoding;
     dispatch_queue_t mEncodeQueue;
     
-    // SPS/PPS for H.264
+    // SPS/PPS
     NSData *mSPS;
     NSData *mPPS;
+    BOOL mSPSPPSSent;
 }
 
 - (instancetype)initWithWidth:(int)width height:(int)height bitrate:(int)bitrate fps:(int)fps {
@@ -31,6 +33,9 @@
         mSession = NULL;
         mIsEncoding = NO;
         mEncodeQueue = dispatch_queue_create("com.iosscreenstream.encoder", DISPATCH_QUEUE_SERIAL);
+        mSPS = nil;
+        mPPS = nil;
+        mSPSPPSSent = NO;
     }
     return self;
 }
@@ -48,7 +53,6 @@
     
     OSStatus status;
     
-    // Create compression session
     status = VTCompressionSessionCreate(
         kCFAllocatorDefault,
         mWidth,
@@ -63,26 +67,26 @@
     );
     
     if (status != noErr) {
-        TVLog(@"Failed to create compression session: %d", status);
+        TVLog(@"创建编码会话失败: %d", status);
         return;
     }
     
-    // Configure for low latency
+    // 低延迟配置
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
     
-    // Bitrate
+    // 码率
     CFNumberRef bitrateNum = (__bridge CFNumberRef)@(mBitrate);
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_AverageBitRate, bitrateNum);
     
-    // Expected frame rate
+    // 帧率
     CFNumberRef fpsNum = (__bridge CFNumberRef)@(mFps);
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ExpectedFrameRate, fpsNum);
     
-    // Profile Level
+    // 编码档位
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_Main_AutoLevel);
     
-    // Data rate limits (for constant quality) - DataRateLimits expects CFArray[2] of CFNumberRef (bytes/sec)
+    // 码率限制
     int64_t dataRateLimitBytesPerSec = mBitrate / 8;
     CFNumberRef dataRateLimits[2];
     dataRateLimits[0] = (__bridge CFNumberRef)[NSNumber numberWithLongLong:dataRateLimitBytesPerSec * 2];
@@ -91,15 +95,19 @@
     VTSessionSetProperty(mSession, kVTCompressionPropertyKey_DataRateLimits, dataRateLimitsArray);
     CFRelease(dataRateLimitsArray);
     
-    // Start encoding
+    // 关键帧间隔（约2秒一个关键帧）
+    CFNumberRef maxKeyFrameInterval = (__bridge CFNumberRef)@(mFps * 2);
+    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_MaxKeyFrameInterval, maxKeyFrameInterval);
+    
     status = VTCompressionSessionPrepareToEncodeFrames(mSession);
     if (status != noErr) {
-        TVLog(@"Failed to prepare encoding: %d", status);
+        TVLog(@"编码准备失败: %d", status);
         return;
     }
     
     mIsEncoding = YES;
-    TVLog(@"Video encoder started: %dx%d @ %d kbps %d fps", mWidth, mHeight, mBitrate / 1000, mFps);
+    mSPSPPSSent = NO;
+    TVLog(@"视频编码器已启动: %dx%d @ %d kbps %d fps", mWidth, mHeight, mBitrate / 1000, mFps);
 }
 
 - (void)stopEncoding {
@@ -109,8 +117,11 @@
     CFRelease(mSession);
     mSession = NULL;
     mIsEncoding = NO;
+    mSPS = nil;
+    mPPS = nil;
+    mSPSPPSSent = NO;
     
-    TVLog(@"Video encoder stopped");
+    TVLog(@"视频编码器已停止");
 }
 
 - (void)encodeSampleBuffer:(CMSampleBufferRef)sampleBuffer {
@@ -133,22 +144,24 @@
     );
     
     if (status != noErr) {
-        TVLog(@"Encode frame failed: %d", status);
+        TVLog(@"编码帧失败: %d", status);
     }
 }
+
+#pragma mark - NAL 单元提取（AVCC 格式 → Annex B）
 
 - (void)handleEncodedData:(CMSampleBufferRef)sampleBuffer {
     if (!sampleBuffer) return;
     
+    // 判断是否关键帧
     CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, false);
-    BOOL isKeyFrame = YES;
+    BOOL isKeyFrame = NO;
     if (attachments && CFArrayGetCount(attachments) > 0) {
         CFDictionaryRef attachment = (CFDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
         CFBooleanRef notSync = (CFBooleanRef)CFDictionaryGetValue(attachment, kCMSampleAttachmentKey_NotSync);
         isKeyFrame = !(notSync && CFBooleanGetValue(notSync));
     }
     
-    // Get H.264 NAL units
     CMBlockBufferRef blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer);
     if (!blockBuffer) return;
     
@@ -156,62 +169,99 @@
     char *dataPointer = NULL;
     CMBlockBufferGetDataPointer(blockBuffer, 0, NULL, &totalLength, &dataPointer);
     
-    // Parse NAL units (Annex B format)
-    NSMutableData *encodedData = [NSMutableData data];
+    if (totalLength == 0) return;
     
-    size_t offset = 0;
-    while (offset < totalLength - 4) {
-        // Find start code (0x00000001 or 0x000001)
-        uint32_t *ptr = (uint32_t *)(dataPointer + offset);
-        uint32_t startCode = *ptr;
+    // VideoToolbox 输出的是 AVCC 格式（4字节长度前缀 + NAL 数据）
+    // 我们将其转换为 Annex B 格式（00 00 00 01 + NAL 数据）供 FFmpeg 解码
+    
+    NSMutableData *annexBData = [NSMutableData data];
+    
+    // 如果是关键帧，先提取并发送 SPS/PPS
+    if (isKeyFrame) {
+        [self extractSPSPPSFromFormatDescription:CMSampleBufferGetFormatDescription(sampleBuffer)];
         
-        // Check for start code
-        BOOL hasStartCode = (startCode == 0x01000000) || ((startCode & 0x00FFFFFF) == 0x00010000);
-        
-        if (hasStartCode) {
-            // Find next start code
-            size_t nalStart = offset + 4;
-            size_t nextOffset = nalStart + 1;
-            
-            while (nextOffset < totalLength - 4) {
-                uint32_t *nextPtr = (uint32_t *)(dataPointer + nextOffset);
-                uint32_t nextStartCode = *nextPtr;
-                if ((nextStartCode == 0x01000000) || ((nextStartCode & 0x00FFFFFF) == 0x00010000)) {
-                    break;
-                }
-                nextOffset++;
-            }
-            
-            size_t nalLength = nextOffset - nalStart;
-            if (nalLength > 0) {
-                // Convert to length-prefixed format (4 bytes length + NAL data)
-                uint32_t nalLengthNet = htonl(nalLength);
-                [encodedData appendBytes:&nalLengthNet length:4];
-                [encodedData appendBytes:dataPointer + nalStart length:nalLength];
-            }
-            
-            offset = nextOffset;
-        } else {
-            offset++;
+        if (mSPS && mPPS) {
+            // Annex B start code
+            uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
+            [annexBData appendBytes:startCode length:4];
+            [annexBData appendData:mSPS];
+            [annexBData appendBytes:startCode length:4];
+            [annexBData appendData:mPPS];
         }
     }
     
-    if (encodedData.length > 0) {
-        // Send SPS/PPS with keyframes
-        if (isKeyFrame && !mSPS) {
-            // Extract SPS/PPS from parameter set
-            // For now, use common values or extract from first frame
+    // 解析 AVCC 格式：4字节大端长度 + NAL 数据，循环处理
+    size_t offset = 0;
+    while (offset + 4 <= totalLength) {
+        uint32_t nalLength = 0;
+        memcpy(&nalLength, dataPointer + offset, 4);
+        nalLength = CFSwapInt32BigToHost(nalLength);
+        
+        if (offset + 4 + nalLength > totalLength) {
+            TVLog(@"NAL 长度越界: offset=%zu, nalLen=%u, total=%zu", offset, nalLength, totalLength);
+            break;
         }
         
+        // 写入 Annex B start code + NAL 数据
+        uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
+        [annexBData appendBytes:startCode length:4];
+        [annexBData appendBytes:dataPointer + offset + 4 length:nalLength];
+        
+        offset += 4 + nalLength;
+    }
+    
+    if (annexBData.length > 0) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self.delegate videoEncoder:self didEncodeData:encodedData isKeyFrame:isKeyFrame];
+            [self.delegate videoEncoder:self didEncodeData:[annexBData copy] isKeyFrame:isKeyFrame];
         });
+    }
+}
+
+- (void)extractSPSPPSFromFormatDescription:(CMFormatDescriptionRef)formatDescription {
+    if (!formatDescription) return;
+    
+    size_t parameterSetCount = 0;
+    OSStatus status = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+        formatDescription,
+        0,  // SPS
+        NULL, NULL,
+        &parameterSetCount,
+        NULL
+    );
+    
+    if (status != noErr) {
+        TVLog(@"提取 SPS/PPS 失败: %d", status);
+        return;
+    }
+    
+    // 提取 SPS（索引0）
+    const uint8_t *spsData = NULL;
+    size_t spsSize = 0;
+    status = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+        formatDescription, 0, &spsData, &spsSize, NULL, NULL
+    );
+    if (status == noErr && spsData && spsSize > 0) {
+        mSPS = [NSData dataWithBytes:spsData length:spsSize];
+    }
+    
+    // 提取 PPS（索引1）
+    const uint8_t *ppsData = NULL;
+    size_t ppsSize = 0;
+    status = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
+        formatDescription, 1, &ppsData, &ppsSize, NULL, NULL
+    );
+    if (status == noErr && ppsData && ppsSize > 0) {
+        mPPS = [NSData dataWithBytes:ppsData length:ppsSize];
+    }
+    
+    if (mSPS && mPPS) {
+        TVLog(@"SPS/PPS 提取成功: SPS=%zu字节, PPS=%zu字节", spsSize, ppsSize);
     }
 }
 
 static void didEncodeCallback(void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status, VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer) {
     if (status != noErr) {
-        TVLog(@"Encode callback error: %d", status);
+        TVLog(@"编码回调错误: %d", status);
         return;
     }
     

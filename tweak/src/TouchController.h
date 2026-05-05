@@ -1,5 +1,6 @@
 /*
- * iOSScreenStream - Touch controller using STHIDEventGenerator
+ * iOSScreenStream - 触控控制器
+ * 使用 TrollVNC 的 STHIDEventGenerator 注入触摸事件
  */
 
 #import <Foundation/Foundation.h>

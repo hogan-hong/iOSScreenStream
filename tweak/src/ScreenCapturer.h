@@ -1,6 +1,6 @@
 /*
- * iOSScreenStream - Screen capture using IOSurface
- * Based on TrollVNC implementation
+ * iOSScreenStream - 屏幕捕获（IOSurface 方式）
+ * 基于 TrollVNC 实现
  */
 
 #import <Foundation/Foundation.h>

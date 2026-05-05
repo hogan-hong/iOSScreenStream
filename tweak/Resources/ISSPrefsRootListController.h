@@ -1,5 +1,5 @@
 /*
- * iOSScreenStream - Preferences Root List Controller
+ * iOSScreenStream - 设置页面控制器
  */
 
 #import <Preferences/PSListController.h>

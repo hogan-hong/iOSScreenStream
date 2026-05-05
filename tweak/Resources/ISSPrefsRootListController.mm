@@ -1,42 +1,46 @@
 /*
- * iOSScreenStream - Preferences Root List Controller
- * Settings UI for configuring screen streaming
+ * iOSScreenStream - 设置页面控制器
+ * 修改：包名更正、应用按钮通知 tweak 重新加载
  */
 
 #import <Foundation/Foundation.h>
 #import <Preferences/PSSpecifier.h>
 #import <Preferences/PSListController.h>
 #import <UIKit/UIKit.h>
-#import <Network/Network.h>
 
 #import "ISSPrefsRootListController.h"
 
-#define PREFS_ID @"com.yourname.iosscreenstream"
+#define PREFS_ID @"com.hogan.iosscreenstream"
+#define kSettingsChangedNotification "com.hogan.iosscreenstream.settingsChanged"
 
 NSString *GetDeviceIPAddress(void) {
     struct ifaddrs *ifaList = NULL;
     if (getifaddrs(&ifaList) != 0 || !ifaList)
         return @"未获取到";
 
-    const char *iface = "en0";
+    // 优先 en0（WiFi），其次 en1
+    const char *ifaces[] = {"en0", "en1", NULL};
     NSString *ipv4 = nil;
     
-    for (struct ifaddrs *ifa = ifaList; ifa; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr || !ifa->ifa_name)
-            continue;
-        if (strcmp(ifa->ifa_name, iface) != 0)
-            continue;
-        if (!(ifa->ifa_flags & IFF_UP) || (ifa->ifa_flags & IFF_LOOPBACK))
-            continue;
+    for (int i = 0; ifaces[i] != NULL; i++) {
+        for (struct ifaddrs *ifa = ifaList; ifa; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr || !ifa->ifa_name)
+                continue;
+            if (strcmp(ifa->ifa_name, ifaces[i]) != 0)
+                continue;
+            if (!(ifa->ifa_flags & IFF_UP) || (ifa->ifa_flags & IFF_LOOPBACK))
+                continue;
 
-        if (ifa->ifa_addr->sa_family == AF_INET) {
-            char buf[INET_ADDRSTRLEN] = {0};
-            struct sockaddr_in *sin = (struct sockaddr_in *)ifa->ifa_addr;
-            if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) {
-                ipv4 = [NSString stringWithUTF8String:buf];
-                break;
+            if (ifa->ifa_addr->sa_family == AF_INET) {
+                char buf[INET_ADDRSTRLEN] = {0};
+                struct sockaddr_in *sin = (struct sockaddr_in *)ifa->ifa_addr;
+                if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) {
+                    ipv4 = [NSString stringWithUTF8String:buf];
+                    break;
+                }
             }
         }
+        if (ipv4) break;
     }
     freeifaddrs(ifaList);
     return ipv4 ?: @"未获取到";
@@ -45,9 +49,7 @@ NSString *GetDeviceIPAddress(void) {
 @interface ISSPrefsRootListController ()
 @end
 
-@implementation ISSPrefsRootListController {
-    int _notifyToken;
-}
+@implementation ISSPrefsRootListController
 
 - (id)readPreferenceValue:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
@@ -82,12 +84,12 @@ NSString *GetDeviceIPAddress(void) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         
-        // Header
+        // 头部说明
         PSSpecifier *header = [PSSpecifier groupSpecifierWithIdentifier:@"header"];
-        [header setProperty:@"iOSScreenStream v1.0.0\n低延迟屏幕流传输控制" forKey:@"footerText"];
+        [header setProperty:@"iOSScreenStream v1.1.0\n低延迟屏幕流传输与反向触控" forKey:@"footerText"];
         [specs addObject:header];
         
-        // Enable toggle
+        // 启用开关
         PSSpecifier *enabled = [PSSpecifier preferenceSpecifierNamed:@"启用服务"
                                                               target:self
                                                                set:@selector(setPreferenceValue:specifier:)
@@ -100,15 +102,14 @@ NSString *GetDeviceIPAddress(void) {
         [enabled setProperty:@"enabled" forKey:@"key"];
         [specs addObject:enabled];
         
-        // Separator
         [specs addObject:[PSSpecifier separatorSpecifier]];
         
-        // Connection group
+        // 连接设置
         PSSpecifier *connGroup = [PSSpecifier groupSpecifierWithIdentifier:@"connection"];
         [connGroup setProperty:@"连接设置" forKey:@"name"];
         [specs addObject:connGroup];
         
-        // Server IP
+        // 电脑 IP
         PSSpecifier *serverIP = [PSSpecifier preferenceSpecifierNamed:@"电脑 IP 地址"
                                                             target:self
                                                              set:@selector(setPreferenceValue:specifier:)
@@ -123,7 +124,7 @@ NSString *GetDeviceIPAddress(void) {
         [serverIP setProperty:@"url" forKey:@"keyboardType"];
         [specs addObject:serverIP];
         
-        // Video Port
+        // 视频端口
         PSSpecifier *videoPort = [PSSpecifier preferenceSpecifierNamed:@"视频端口 (UDP)"
                                                               target:self
                                                                set:@selector(setPreferenceValue:specifier:)
@@ -138,7 +139,7 @@ NSString *GetDeviceIPAddress(void) {
         [videoPort setProperty:@"number" forKey:@"keyboardType"];
         [specs addObject:videoPort];
         
-        // Control Port
+        // 控制端口
         PSSpecifier *controlPort = [PSSpecifier preferenceSpecifierNamed:@"控制端口 (TCP)"
                                                                 target:self
                                                                  set:@selector(setPreferenceValue:specifier:)
@@ -153,7 +154,7 @@ NSString *GetDeviceIPAddress(void) {
         [controlPort setProperty:@"number" forKey:@"keyboardType"];
         [specs addObject:controlPort];
         
-        // Device IP (read-only)
+        // 本机 IP（只读）
         PSSpecifier *deviceIP = [PSSpecifier preferenceSpecifierNamed:@"本机 IP 地址"
                                                               target:self
                                                                set:nil
@@ -165,15 +166,14 @@ NSString *GetDeviceIPAddress(void) {
         [deviceIP setProperty:@"只读" forKey:@"default"];
         [specs addObject:deviceIP];
         
-        // Separator
         [specs addObject:[PSSpecifier separatorSpecifier]];
         
-        // Video group
+        // 视频质量
         PSSpecifier *videoGroup = [PSSpecifier groupSpecifierWithIdentifier:@"video"];
         [videoGroup setProperty:@"视频质量" forKey:@"name"];
         [specs addObject:videoGroup];
         
-        // FPS
+        // 帧率
         PSSpecifier *fps = [PSSpecifier preferenceSpecifierNamed:@"帧率 (FPS)"
                                                          target:self
                                                           set:@selector(setPreferenceValue:specifier:)
@@ -189,7 +189,7 @@ NSString *GetDeviceIPAddress(void) {
         [fps setProperty:@1 forKey:@"step"];
         [specs addObject:fps];
         
-        // Bitrate
+        // 码率
         PSSpecifier *bitrate = [PSSpecifier preferenceSpecifierNamed:@"码率 (kbps)"
                                                             target:self
                                                              set:@selector(setPreferenceValue:specifier:)
@@ -205,10 +205,9 @@ NSString *GetDeviceIPAddress(void) {
         [bitrate setProperty:@100 forKey:@"step"];
         [specs addObject:bitrate];
         
-        // Separator
         [specs addObject:[PSSpecifier separatorSpecifier]];
         
-        // Apply button
+        // 应用按钮
         PSSpecifier *apply = [PSSpecifier preferenceSpecifierNamed:@"应用更改"
                                                            target:self
                                                             set:nil
@@ -227,12 +226,18 @@ NSString *GetDeviceIPAddress(void) {
 
 - (void)applyChanges {
     [self.view endEditing:YES];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    
+    // 发送 Darwin 通知让 tweak 重新加载设置
+    CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        CFSTR(kSettingsChangedNotification),
+        NULL, NULL, YES
+    );
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已应用"
-                                                                   message:@"请手动重启插件使设置生效"
+                                                                   message:@"设置已生效，无需重启"
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

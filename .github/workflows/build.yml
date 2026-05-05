@@ -1,4 +1,4 @@
-name: Build iOSScreenStream
+name: 构建 iOSScreenStream
 
 on:
   workflow_dispatch:
@@ -17,83 +17,86 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
           brew install xcbeautify ldid-procursus p7zip make
 
-      - name: Checkout Theos
+      - name: 检出 Theos
         uses: actions/checkout@v4
         with:
           repository: roothide/theos
           path: theos
           submodules: recursive
 
-      - name: Checkout TrollVNC (for STHIDEventGenerator)
+      - name: 检出 TrollVNC（获取 STHIDEventGenerator 头文件）
         uses: actions/checkout@v4
         with:
           repository: hogan-hong/TrollVNC
           path: trollvnc
 
-      - name: Copy TrollVNC headers and source
+      - name: 复制 TrollVNC 头文件和源码
         run: |
           mkdir -p theos/include/TrollVNC
           mkdir -p tweak/include
           mkdir -p tweak/src
           cp trollvnc/src/STHIDEventGenerator.h theos/include/TrollVNC/
-          cp trollvnc/src/Control.h theos/include/TrollVNC/
+          cp trollvnc/src/Control.h theos/include/TrollVNC/ 2>/dev/null || true
           cp -r trollvnc/include/* theos/include/ 2>/dev/null || true
           cp -r trollvnc/include-spi/* theos/include/ 2>/dev/null || true
           cp trollvnc/src/STHIDEventGenerator.h tweak/include/
-          cp trollvnc/src/STHIDEventGenerator.mm tweak/src/
-          cp trollvnc/src/Control.h tweak/src/
+          cp trollvnc/src/STHIDEventGenerator.mm tweak/src/ 2>/dev/null || true
+          cp trollvnc/src/Control.h tweak/src/ 2>/dev/null || true
+          echo "TrollVNC 文件已复制"
 
-      - name: Setup Xcode
+      - name: 配置 Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "16.2"
 
-      - name: Install iOS SDKs
+      - name: 安装 iOS SDK
         run: |
           export THEOS=$GITHUB_WORKSPACE/theos
           cd $THEOS
-          ./bin/install-sdk iPhoneOS16.5 || echo "SDK 16.5 failed"
-          ./bin/install-sdk iPhoneOS14.5 || echo "SDK 14.5 failed"
-          ls -la sdks/ 2>/dev/null || echo "No sdks dir"
+          ./bin/install-sdk iPhoneOS16.5 || echo "SDK 16.5 安装失败"
+          ./bin/install-sdk iPhoneOS14.5 || echo "SDK 14.5 安装失败"
+          ls -la sdks/ 2>/dev/null || echo "无 SDK 目录"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build package
+      - name: 构建 deb 包
         run: |
           cd tweak
           pwd
           ls -la
           export THEOS=$GITHUB_WORKSPACE/theos
           echo "THEOS=$THEOS"
-          echo "Checking Theos structure..."
+          echo "检查 Theos 结构..."
           ls -la $THEOS/
           ls -la $THEOS/makefiles/ 2>/dev/null | head -10
-          ls -la $THEOS/sdks/ 2>/dev/null || echo "No SDKs"
-          echo "Starting build..."
+          ls -la $THEOS/sdks/ 2>/dev/null || echo "无 SDK"
+          echo "开始构建..."
           set -o pipefail
           gmake package 2>&1 | tee ../build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          echo "Build exit code: $BUILD_EXIT_CODE"
+          echo "构建退出码: $BUILD_EXIT_CODE"
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "Build failed with exit code $BUILD_EXIT_CODE"
+            echo "构建失败，退出码: $BUILD_EXIT_CODE"
+            echo "===== 构建日志末尾 ====="
+            tail -50 ../build.log
             exit 1
           fi
         env:
           THEOS: ${{ github.workspace }}/theos
 
-      - name: Prepare artifacts
+      - name: 准备产物
         run: |
           mkdir -p artifacts
           cd tweak
           if [ -d "packages" ]; then
-            cp packages/*.deb ../artifacts/ 2>/dev/null && echo "Copied deb" || echo "No deb found"
+            cp packages/*.deb ../artifacts/ 2>/dev/null && echo "deb 已复制" || echo "未找到 deb"
           fi
           cd ..
           if [ -f "build.log" ]; then
@@ -101,7 +104,7 @@ jobs:
           fi
           ls -la artifacts/
 
-      - name: Upload package
+      - name: 上传构建产物
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -117,23 +120,36 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: Download artifact
+      - name: 下载构建产物
         uses: actions/download-artifact@v4
         with:
           name: iOSScreenStream
           path: release-packages
 
-      - name: Create Release
+      - name: 创建 Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: build-${{ github.sha }}
-          name: iOSScreenStream Build
+          tag_name: v1.1.0-build-${{ github.sha }}
+          name: iOSScreenStream v1.1.0
           body: |
-            Automated build from GitHub Actions
-            Built commit: ${{ github.sha }}
+            iOSScreenStream 自动构建
+
+            版本: v1.1.0
+            提交: ${{ github.sha }}
+
+            更新内容:
+            - 修复 TCP 控制通道方向（iOS 端改为监听）
+            - 修复 VideoEncoder NAL 解析（AVCC → Annex B）
+            - 修复 SPS/PPS 提取
+            - 新增 UDP 视频分包（防丢包）
+            - 新增 TCP 心跳保活
+            - 修复 TCP 数据边界处理
+            - 设置变更动态生效（CFNotification）
+            - PC 端自动检测分辨率
+            - 多设备模式传递 ios-ip
           files: release-packages/**/*
           draft: false
-          prerelease: true
+          prerelease: false

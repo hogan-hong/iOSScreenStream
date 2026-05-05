@@ -1,11 +1,11 @@
 /*
  * STHIDEventGenerator.h
- * 
- * IMPORTANT: This file needs to be copied from TrollVNC:
+ *
+ * 重要：此文件需从 TrollVNC 复制：
  * src/STHIDEventGenerator.h
- * 
- * This is TrollVNC's touch event injection implementation.
- * Copy it to this location before building.
+ *
+ * 这是 TrollVNC 的触摸事件注入实现。
+ * 编译前请复制到此位置。
  */
 
 #import <CoreGraphics/CGGeometry.h>

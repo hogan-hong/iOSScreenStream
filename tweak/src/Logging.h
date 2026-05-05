@@ -1,19 +1,11 @@
 /*
- * iOSScreenStream - Low-latency screen streaming for iOS
- * Logging header
+ * iOSScreenStream - 日志工具
  */
 
-#ifndef Logging_h
-#define Logging_h
-
-#import <Foundation/NSObjCRuntime.h>
+#import <Foundation/Foundation.h>
 
 #ifdef DEBUG
-#define TVLog(fmt, ...) \
-    NSLog(@"[iOSScreenStream] " fmt, ##__VA_ARGS__)
+#define TVLog(fmt, ...) NSLog(@"[iOSScreenStream] " fmt, ##__VA_ARGS__)
 #else
-#define TVLog(fmt, ...) \
-    do {} while(0)
+#define TVLog(fmt, ...) NSLog(@"[iOSScreenStream] " fmt, ##__VA_ARGS__)
 #endif
-
-#endif /* Logging_h */

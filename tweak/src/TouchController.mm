@@ -1,6 +1,6 @@
 /*
- * iOSScreenStream - Touch controller using STHIDEventGenerator
- * Based on TrollVNC's touch injection implementation
+ * iOSScreenStream - 触控控制器
+ * 使用 TrollVNC 的 STHIDEventGenerator 注入触摸事件
  */
 
 #import "TouchController.h"
@@ -27,22 +27,10 @@
 }
 
 - (void)touchMoveToPoint:(CGPoint)point {
-    // STHIDEventGenerator doesn't have a direct move method
-    // We use the event stream approach
-    NSDictionary *eventInfo = @{
-        @"eventInfo": @{
-            @"events": @[
-                @{
-                    @"inputType": @"finger",
-                    @"phase": @"moved",
-                    @"x": @(point.x),
-                    @"y": @(point.y),
-                    @"interpolate": @NO
-                }
-            ]
-        }
-    };
-    [[STHIDEventGenerator sharedGenerator] sendEventStream:eventInfo];
+    // STHIDEventGenerator 的 move 实现：
+    // 先抬起再按下新位置，或直接用 touchDown 模拟
+    // TrollVNC 实际支持 finger move，这里用 touchDown + touchCount 模拟
+    [[STHIDEventGenerator sharedGenerator] touchDown:point touchCount:1];
 }
 
 - (void)tapAtPoint:(CGPoint)point {

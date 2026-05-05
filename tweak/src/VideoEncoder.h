@@ -1,5 +1,5 @@
 /*
- * iOSScreenStream - VideoToolbox H.264 encoder
+ * iOSScreenStream - VideoToolbox H.264 编码器
  */
 
 #import <Foundation/Foundation.h>

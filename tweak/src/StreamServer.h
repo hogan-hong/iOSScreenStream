@@ -1,5 +1,6 @@
 /*
- * iOSScreenStream - Stream server (UDP video + TCP control)
+ * iOSScreenStream - 流服务端
+ * UDP 视频推流 + TCP 控制监听
  */
 
 #import <Foundation/Foundation.h>
@@ -11,6 +12,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)streamServer:(id)server didReceiveTouchDown:(CGPoint)point;
 - (void)streamServer:(id)server didReceiveTouchUp:(CGPoint)point;
 - (void)streamServer:(id)server didReceiveTouchMove:(CGPoint)point;
+@optional
+- (void)streamServerClientDidConnect:(id)server;
+- (void)streamServerClientDidDisconnect:(id)server;
 @end
 
 @interface StreamServer : NSObject
@@ -20,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSString *serverIP;
 @property (nonatomic, readonly) int videoPort;
 @property (nonatomic, readonly) int controlPort;
+@property (nonatomic, readonly) BOOL clientConnected;
 
 - (instancetype)initWithServerIP:(NSString *)ip videoPort:(int)videoPort controlPort:(int)controlPort;
 - (BOOL)start;
