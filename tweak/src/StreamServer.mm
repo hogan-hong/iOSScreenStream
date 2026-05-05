@@ -281,8 +281,6 @@
             // 分包头
             uint32_t totalLenNet = htonl((uint32_t)totalLength);
             uint32_t offsetNet = htonl((uint32_t)offset);
-            uint32_t chunkLenNet = htonl((uint32_t)chunkLen);
-            
             [packet appendBytes:&seq length:2];           // 2字节序号
             [packet appendBytes:&totalParts length:2];     // 2字节总分包数
             [packet appendBytes:&partIndex length:2];      // 2字节当前分包索引
@@ -344,7 +342,6 @@
         NSArray *lines = [string componentsSeparatedByString:@"\n"];
         
         // 最后一段可能不完整（没有换行符结尾）
-        NSString *lastSegment = [lines lastObject];
         BOOL lastComplete = [string hasSuffix:@"\n"];
         
         for (NSUInteger i = 0; i < lines.count; i++) {
