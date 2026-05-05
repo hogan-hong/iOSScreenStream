@@ -13,10 +13,21 @@ typedef NS_ENUM(NSInteger, PSTableViewCellType) {
     PSTableViewCellTypeLabel = 6
 };
 
+// 旧版常量别名（兼容）
+#define PSTableViewCellSwitch       PSTableViewCellTypeSwitch
+#define PSTableViewCellTypeLabel    PSTableViewCellTypeLabel
+
+typedef NS_ENUM(NSInteger, PSTableViewCellAccessoryType) {
+    PSTableViewCellAccessoryNone = 0,
+    PSTableViewCellAccessoryDisclosureIndicator = 1,
+    PSTableViewCellAccessoryDetailDisclosureButton = 2,
+    PSTableViewCellAccessoryCheckmark = 3,
+};
+
 @interface PSSpecifier : NSObject
-+ (id)groupSpecifierWithIdentifier:(id)identifier;
-+ (id)separatorSpecifier;
-+ (id)preferenceSpecifierNamed:(id)name target:(id)target set:(SEL)set get:(SEL)get detail:(id)detail cell:(PSTableViewCellType)cell edit:(id)edit;
++ (instancetype)groupSpecifierWithIdentifier:(NSString *)identifier;
++ (instancetype)separatorSpecifier;
++ (instancetype)preferenceSpecifierNamed:(NSString *)name target:(id)target set:(SEL)set get:(SEL)get detail:(Class)detail cell:(PSTableViewCellType)cell edit:(PSTableViewCellAccessoryType)edit;
 @property (nonatomic, copy) NSString *identifier;
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *footerText;

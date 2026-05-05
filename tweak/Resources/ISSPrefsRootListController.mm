@@ -4,9 +4,15 @@
  */
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <Preferences/PSSpecifier.h>
 #import <Preferences/PSListController.h>
-#import <UIKit/UIKit.h>
+
+#import <sys/socket.h>
+#import <net/if.h>
+#import <ifaddrs.h>
+#import <netinet/in.h>
+#import <arpa/inet.h>
 
 #import "ISSPrefsRootListController.h"
 
@@ -114,7 +120,7 @@ NSString *GetDeviceIPAddress(void) {
                                                             target:self
                                                              set:@selector(setPreferenceValue:specifier:)
                                                              get:@selector(readPreferenceValue:)
-                                                          detail:PSTableViewCellTypeTextField
+                                                          detail:Nil
                                                              cell:PSTableViewCellTypeTextField
                                                              edit:PSTableViewCellAccessoryNone];
         [serverIP setProperty:@"serverIP" forKey:@"key"];
@@ -129,7 +135,7 @@ NSString *GetDeviceIPAddress(void) {
                                                               target:self
                                                                set:@selector(setPreferenceValue:specifier:)
                                                                get:@selector(readPreferenceValue:)
-                                                            detail:PSTableViewCellTypeTextField
+                                                            detail:Nil
                                                                cell:PSTableViewCellTypeTextField
                                                                edit:PSTableViewCellAccessoryNone];
         [videoPort setProperty:@"videoPort" forKey:@"key"];
@@ -144,7 +150,7 @@ NSString *GetDeviceIPAddress(void) {
                                                                 target:self
                                                                  set:@selector(setPreferenceValue:specifier:)
                                                                  get:@selector(readPreferenceValue:)
-                                                              detail:PSTableViewCellTypeTextField
+                                                              detail:Nil
                                                                  cell:PSTableViewCellTypeTextField
                                                                  edit:PSTableViewCellAccessoryNone];
         [controlPort setProperty:@"controlPort" forKey:@"key"];
@@ -178,7 +184,7 @@ NSString *GetDeviceIPAddress(void) {
                                                          target:self
                                                           set:@selector(setPreferenceValue:specifier:)
                                                           get:@selector(readPreferenceValue:)
-                                                       detail:PSTableViewCellTypeSlider
+                                                       detail:Nil
                                                           cell:PSTableViewCellTypeSlider
                                                           edit:PSTableViewCellAccessoryNone];
         [fps setProperty:@"fps" forKey:@"key"];
@@ -194,7 +200,7 @@ NSString *GetDeviceIPAddress(void) {
                                                             target:self
                                                              set:@selector(setPreferenceValue:specifier:)
                                                              get:@selector(readPreferenceValue:)
-                                                          detail:PSTableViewCellTypeSlider
+                                                          detail:Nil
                                                              cell:PSTableViewCellTypeSlider
                                                              edit:PSTableViewCellAccessoryNone];
         [bitrate setProperty:@"bitrate" forKey:@"key"];
