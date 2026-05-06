@@ -86,7 +86,7 @@ jobs:
         env:
           THEOS: ${{ github.workspace }}/theos
 
-      - name: 验证 deb 包文件名
+      - name: 修复 deb 中的文件名大小写
         run: |
           DEB_FILE=$(ls /Volumes/theos_build/tweak/packages/*.deb 2>/dev/null | head -1)
           if [ -z "$DEB_FILE" ]; then
@@ -95,26 +95,45 @@ jobs:
           fi
           echo "deb 包: $DEB_FILE"
           
-          echo "===== 验证 bundle 内容 ====="
-          STAGING_DIR="/Volumes/theos_build/tweak/.theos/_/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle"
-          if [ -d "$STAGING_DIR" ]; then
-            echo "Bundle 文件列表："
-            ls -la "$STAGING_DIR/"
-            # 关键检查：Info.plist 必须是大写 I
-            if [ -f "$STAGING_DIR/Info.plist" ]; then
-              echo "✅ Info.plist（大写I）存在"
-            elif [ -f "$STAGING_DIR/info.plist" ]; then
-              echo "❌ 仍然是小写 info.plist！"
-              exit 1
-            else
-              echo "⚠️ 没有任何 info.plist"
-            fi
+          # 解压 deb，修正文件名，重新打包
+          # Theos 始终生成小写 info.plist，必须在 case-sensitive 卷上修正
+          REPACK_DIR="/tmp/deb_repack"
+          rm -rf "$REPACK_DIR"
+          dpkg-deb -R "$DEB_FILE" "$REPACK_DIR"
+          
+          BUNDLE_DIR="$REPACK_DIR/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle"
+          echo "===== 修正前 bundle 内容 ====="
+          ls -la "$BUNDLE_DIR/" 2>/dev/null || echo "bundle 目录不存在"
+          
+          # 修正 info.plist → Info.plist（iOS NSBundle 区分大小写）
+          if [ -f "$BUNDLE_DIR/info.plist" ]; then
+            mv "$BUNDLE_DIR/info.plist" "$BUNDLE_DIR/Info.plist"
+            echo "✅ 已修正 info.plist → Info.plist"
+          elif [ -f "$BUNDLE_DIR/Info.plist" ]; then
+            echo "✅ Info.plist 已是大写"
+          else
+            echo "⚠️ 未找到任何 info/Info.plist"
           fi
           
-          # 复制 deb 回工作目录
+          echo "===== 修正后 bundle 内容 ====="
+          ls -la "$BUNDLE_DIR/"
+          
+          # 重新打包 deb
+          FIXED_DEB="${DEB_FILE%.deb}_fixed.deb"
+          dpkg-deb -b "$REPACK_DIR" "$FIXED_DEB"
+          
+          # 替换原文件
+          mv "$FIXED_DEB" "$DEB_FILE"
+          echo "✅ deb 已重新打包"
+          
+          # 复制回工作目录
           mkdir -p "$GITHUB_WORKSPACE/tweak/packages"
           cp "$DEB_FILE" "$GITHUB_WORKSPACE/tweak/packages/"
           echo "deb 已复制回工作目录"
+          
+          # 验证最终 deb 内容
+          echo "===== 验证最终 deb 内容 ====="
+          dpkg-deb -c "$DEB_FILE" | grep -i 'preferencebundles\|preferenceloader'
 
       - name: 构建结果诊断
         if: always()
