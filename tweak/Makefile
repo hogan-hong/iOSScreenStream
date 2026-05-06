@@ -2,7 +2,7 @@ THEOS_DEVICE_IP ?= localhost
 THEOS_DEVICE_PORT ?= 2222
 
 PACKAGE_NAME := com.hogan.iosscreenstream
-PACKAGE_VERSION := 1.1.0
+PACKAGE_VERSION := 1.2.0
 PACKAGE_ARCH := iphoneos-arm
 PKG_DEBIAN := com.hogan.iosscreenstream
 
@@ -38,6 +38,7 @@ internal-stage::
 	$(ECHO_NOTHING)cp entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.plist$(ECHO_END)
 	$(ECHO_NOTHING)cp Icon.png $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.png$(ECHO_END)
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle$(ECHO_END)
+	$(ECHO_NOTHING)rm -f $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/info.plist$(ECHO_END)
 	$(ECHO_NOTHING)cp prefs/Resources/Info.plist $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/Info.plist$(ECHO_END)
 	$(ECHO_NOTHING)cp prefs/Resources/Root.plist $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/Root.plist$(ECHO_END)
 	$(ECHO_NOTHING)cp prefs/Resources/icon@2x.png $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/icon@2x.png$(ECHO_END)

@@ -66,44 +66,84 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 创建大小写敏感的磁盘映像
+        run: |
+          # macOS APFS 默认不区分大小写，导致 Theos 生成的 info.plist 无法通过 cp Info.plist 修正大小写
+          # 创建一个区分大小写的 APFS 卷来做构建，确保 deb 内文件名正确
+          hdiutil create -size 2g -type SPARSE -fs "Case-sensitive APFS" -volname theos_build /tmp/theos_build.sparseimage
+          hdiutil mount /tmp/theos_build.sparseimage
+          echo "大小写敏感卷已挂载: /Volumes/theos_build"
+          # 复制项目文件到该卷
+          cp -R "$GITHUB_WORKSPACE/tweak" /Volumes/theos_build/tweak
+          cp -R "$GITHUB_WORKSPACE/pc" /Volumes/theos_build/pc 2>/dev/null || true
+
       - name: 构建 deb 包
         run: |
-          cd tweak
+          cd /Volumes/theos_build/tweak
           export THEOS=$GITHUB_WORKSPACE/theos
-          echo "开始构建..."
-          gmake package 2>&1 | tee ../build.log
+          echo "开始构建（在大小写敏感卷上）..."
+          gmake package 2>&1 | tee /Volumes/theos_build/build.log
         env:
           THEOS: ${{ github.workspace }}/theos
+
+      - name: 验证 deb 包文件名
+        run: |
+          DEB_FILE=$(ls /Volumes/theos_build/tweak/packages/*.deb 2>/dev/null | head -1)
+          if [ -z "$DEB_FILE" ]; then
+            echo "❌ 未找到 deb 包"
+            exit 1
+          fi
+          echo "deb 包: $DEB_FILE"
+          
+          echo "===== 验证 bundle 内容 ====="
+          STAGING_DIR="/Volumes/theos_build/tweak/.theos/_/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle"
+          if [ -d "$STAGING_DIR" ]; then
+            echo "Bundle 文件列表："
+            ls -la "$STAGING_DIR/"
+            # 关键检查：Info.plist 必须是大写 I
+            if [ -f "$STAGING_DIR/Info.plist" ]; then
+              echo "✅ Info.plist（大写I）存在"
+            elif [ -f "$STAGING_DIR/info.plist" ]; then
+              echo "❌ 仍然是小写 info.plist！"
+              exit 1
+            else
+              echo "⚠️ 没有任何 info.plist"
+            fi
+          fi
+          
+          # 复制 deb 回工作目录
+          mkdir -p "$GITHUB_WORKSPACE/tweak/packages"
+          cp "$DEB_FILE" "$GITHUB_WORKSPACE/tweak/packages/"
+          echo "deb 已复制回工作目录"
 
       - name: 构建结果诊断
         if: always()
         run: |
           echo "===== 构建日志末尾 ====="
-          tail -100 build.log 2>/dev/null || echo "无构建日志"
-          cd tweak 2>/dev/null || true
-          echo "===== 验证 bundle ====="
-          find .theos/obj -name "*.bundle" -type d 2>/dev/null || echo "未找到 bundle 目录"
-          find .theos/obj -name "iOSScreenStreamPrefs*" 2>/dev/null || echo "未找到 Prefs 产物"
-          echo "===== 验证 staging ====="
-          find .theos/_/Library -type f 2>/dev/null || echo "staging 目录为空"
+          tail -50 /Volumes/theos_build/build.log 2>/dev/null || echo "无构建日志"
 
       - name: 准备产物
         if: always()
         run: |
           mkdir -p artifacts/pc
-          # deb 包
-          cd tweak
-          if [ -d "packages" ]; then
-            cp packages/*.deb ../artifacts/ 2>/dev/null && echo "deb 已复制" || echo "未找到 deb"
+          DEB_FILE=$(ls tweak/packages/*.deb 2>/dev/null | head -1)
+          if [ -n "$DEB_FILE" ]; then
+            cp "$DEB_FILE" artifacts/ && echo "deb 已复制"
+          else
+            # 尝试从卷上复制
+            DEB_FILE=$(ls /Volumes/theos_build/tweak/packages/*.deb 2>/dev/null | head -1)
+            if [ -n "$DEB_FILE" ]; then
+              cp "$DEB_FILE" artifacts/ && echo "deb 从卷复制"
+            else
+              echo "未找到 deb"
+            fi
           fi
-          cd ..
-          # PC 客户端
-          cp pc/stream_client.py artifacts/pc/
-          cp pc/multi_client.py artifacts/pc/
-          cp pc/requirements.txt artifacts/pc/
-          echo "PC 客户端已复制"
-          # 构建日志
-          if [ -f "build.log" ]; then
+          cp pc/stream_client.py artifacts/pc/ 2>/dev/null || true
+          cp pc/multi_client.py artifacts/pc/ 2>/dev/null || true
+          cp pc/requirements.txt artifacts/pc/ 2>/dev/null || true
+          if [ -f "/Volumes/theos_build/build.log" ]; then
+            cp /Volumes/theos_build/build.log artifacts/
+          elif [ -f "build.log" ]; then
             cp build.log artifacts/
           fi
           echo "===== 产物列表 ====="
@@ -117,8 +157,13 @@ jobs:
           path: artifacts/**
           if-no-files-found: warn
 
+      - name: 卸载磁盘映像
+        if: always()
+        run: |
+          hdiutil detach /Volumes/theos_build -force 2>/dev/null || true
+
   release:
-    if: github.event_name == 'workflow_dispatch' && needs.build.result == 'success'
+    if: needs.build.result == 'success'
     needs: build
     runs-on: macos-14
     permissions:
@@ -127,6 +172,13 @@ jobs:
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: version
+        run: |
+          VERSION=$(grep '^Version:' tweak/control | awk '{print $2}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "版本号: $VERSION"
 
       - name: 下载构建产物
         uses: actions/download-artifact@v4
@@ -137,24 +189,22 @@ jobs:
       - name: 创建 Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.1.0-build-${{ github.sha }}
-          name: iOSScreenStream v1.1.0
+          tag_name: v${{ steps.version.outputs.version }}-build-${{ github.sha }}
+          name: iOSScreenStream v${{ steps.version.outputs.version }}
           body: |
             iOSScreenStream 自动构建
 
-            版本: v1.1.0
+            版本: ${{ steps.version.outputs.version }}
             提交: ${{ github.sha }}
 
             更新内容:
-            - 修复 TCP 控制通道方向（iOS 端改为监听）
-            - 修复 VideoEncoder NAL 解析（AVCC → Annex B）
-            - 修复 SPS/PPS 提取
-            - 新增 UDP 视频分包（防丢包）
-            - 新增 TCP 心跳保活
-            - 修复 TCP 数据边界处理
-            - 设置变更动态生效（CFNotification）
+            - 修复设置页空白（PSListController → PSListItemsController）
+            - 修复设置图标缺失（添加 icon@2x/@3x）
+            - 修复 Info.plist 大小写问题（macOS CI 大小写不敏感导致）
+            - 修复 TCP 控制通道方向
+            - 修复 VideoEncoder NAL 解析
+            - UDP 视频分包 + TCP 心跳保活
             - PC 端自动检测分辨率
-            - 多设备模式传递 ios-ip
           files: release-packages/**/*
           draft: false
           prerelease: false
