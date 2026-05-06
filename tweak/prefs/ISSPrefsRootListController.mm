@@ -1,28 +1,17 @@
 /*
  * iOSScreenStream - 设置页面控制器
- * 继承 PSListItemsController（与 TrollVNC 一致，iOS 14 Settings 兼容）
- * PSListItemsController 会自动从 bundle 的 Root.plist 加载 specifiers
+ * 继承 PSListController（与 TrollVNC 一致）
+ * 必须链接 Preferences.framework（PrivateFrameworks）
  */
 
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
 
 #import <sys/socket.h>
 #import <net/if.h>
 #import <ifaddrs.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
-
-@interface PSSpecifier : NSObject
-- (id)propertyForKey:(NSString *)key;
-- (void)setProperty:(id)value forKey:(NSString *)key;
-@end
-
-@interface PSListItemsController : UIViewController
-@end
-
-@interface ISSPrefsRootListController : PSListItemsController
-@end
 
 #define PREFS_ID @"com.hogan.iosscreenstream"
 #define kSettingsChangedNotification "com.hogan.iosscreenstream.settingsChanged"
@@ -59,6 +48,9 @@ static NSString *GetDeviceIPAddress(void) {
     freeifaddrs(ifaList);
     return ipv4 ?: @"未获取到";
 }
+
+@interface ISSPrefsRootListController : PSListController
+@end
 
 @implementation ISSPrefsRootListController
 

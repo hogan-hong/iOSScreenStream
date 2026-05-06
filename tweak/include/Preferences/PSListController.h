@@ -1,17 +1,15 @@
-// Stub for Preferences/PSListController.h
-// Used by ISSPrefsRootListController
+#import <UIKit/UIKit.h>
 
-#import <Foundation/Foundation.h>
-
-@class PSSpecifier;
-
-@interface PSListController : NSObject
-- (NSArray *)specifiers;
-- (void)reloadSpecifier;
-- (void)removeSpecifierAtIndex:(NSUInteger)index animated:(BOOL)animated;
-- (id)specifierAtIndex:(NSUInteger)index;
-@property (nonatomic, retain) NSMutableArray *specifiers;
+@interface PSListController : UIViewController
+- (NSMutableArray *)specifiers;
+- (void)setSpecifiers:(NSMutableArray *)specifiers;
+- (void)loadView;
+- (void)viewDidLoad;
+- (void)viewWillAppear:(BOOL)animated;
+- (id)readPreferenceValue:(id)specifier;
+- (void)setPreferenceValue:(id)value specifier:(id)specifier;
+- (void)reloadSpecifiers;
 @end
 
-@interface PSController : NSObject
+@interface PSListItemsController : PSListController
 @end
