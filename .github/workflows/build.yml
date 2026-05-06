@@ -22,7 +22,7 @@ jobs:
 
       - name: 安装依赖
         run: |
-          brew install xcbeautify ldid-procursus p7zip make
+          brew install xcbeautify ldid-procursus p7zip make dpkg
 
       - name: 检出 Theos
         uses: actions/checkout@v4
