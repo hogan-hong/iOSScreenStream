@@ -1,6 +1,7 @@
 /*
  * iOSScreenStream - 设置页面控制器
- * 使用 Root.plist 静态定义 specifiers，控制器只处理动态逻辑
+ * 继承 PSListItemsController（与 TrollVNC 一致，iOS 14 Settings 兼容）
+ * PSListItemsController 会自动从 bundle 的 Root.plist 加载 specifiers
  */
 
 #import <Foundation/Foundation.h>
@@ -17,12 +18,10 @@
 - (void)setProperty:(id)value forKey:(NSString *)key;
 @end
 
-@interface PSListController : UIViewController
-- (NSArray *)specifiers;
-- (NSArray *)loadSpecifiersFromPlistName:(NSString *)name target:(id)target;
+@interface PSListItemsController : UIViewController
 @end
 
-@interface ISSPrefsRootListController : PSListController
+@interface ISSPrefsRootListController : PSListItemsController
 @end
 
 #define PREFS_ID @"com.hogan.iosscreenstream"
@@ -62,15 +61,6 @@ static NSString *GetDeviceIPAddress(void) {
 }
 
 @implementation ISSPrefsRootListController
-
-// 显式加载 specifiers：确保 PSListController 能找到 Root.plist
-- (NSArray *)specifiers {
-    NSArray *specs = [super specifiers];
-    if (!specs || [specs count] == 0) {
-        specs = [self loadSpecifiersFromPlistName:@"Root" target:self];
-    }
-    return specs;
-}
 
 // 读取偏好值
 - (id)readPreferenceValue:(PSSpecifier *)specifier {

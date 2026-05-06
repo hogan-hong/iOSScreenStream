@@ -30,9 +30,15 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 include $(THEOS_MAKE_PATH)/package.mk
 
-# ===== 将 entry.plist 和图标安装到 PreferenceLoader 目录 =====
+# ===== 安装资源到正确位置 =====
+# PreferenceLoader entry.plist + 图标（设置主列表入口）
+# Bundle 内的资源文件全部放在 bundle 根目录（和 TrollVNC 一致）
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences$(ECHO_END)
 	$(ECHO_NOTHING)cp entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.plist$(ECHO_END)
 	$(ECHO_NOTHING)cp Icon.png $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/iOSScreenStream.png$(ECHO_END)
-
+	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle$(ECHO_END)
+	$(ECHO_NOTHING)cp prefs/Resources/Info.plist $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/Info.plist$(ECHO_END)
+	$(ECHO_NOTHING)cp prefs/Resources/Root.plist $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/Root.plist$(ECHO_END)
+	$(ECHO_NOTHING)cp prefs/Resources/icon@2x.png $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/icon@2x.png$(ECHO_END)
+	$(ECHO_NOTHING)cp prefs/Resources/icon@3x.png $(THEOS_STAGING_DIR)/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle/icon@3x.png$(ECHO_END)
