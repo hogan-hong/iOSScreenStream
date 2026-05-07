@@ -2,153 +2,129 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>title</key>
-	<string>iOSScreenStream</string>
 	<key>items</key>
 	<array>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>iOSScreenStream</string>
 			<key>footerText</key>
-			<string>iOSScreenStream v1.1.0 - 低延迟屏幕流传输与反向触控</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>label</key>
-			<string>启用服务</string>
-			<key>key</key>
-			<string>enabled</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>连接设置</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSTextFieldCell</string>
-			<key>label</key>
-			<string>电脑 IP 地址</string>
-			<key>key</key>
-			<string>serverIP</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<string>192.168.1.100</string>
-			<key>keyboard</key>
-			<string>Keyboard</string>
-			<key>keyboardType</key>
-			<string>URLAddress</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSTextFieldCell</string>
-			<key>label</key>
-			<string>视频端口 (UDP)</string>
-			<key>key</key>
-			<string>videoPort</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<string>5001</string>
-			<key>keyboard</key>
-			<string>Keyboard</string>
-			<key>keyboardType</key>
-			<string>NumberPad</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSTextFieldCell</string>
-			<key>label</key>
-			<string>控制端口 (TCP)</string>
-			<key>key</key>
-			<string>controlPort</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<string>5002</string>
-			<key>keyboard</key>
-			<string>Keyboard</string>
-			<key>keyboardType</key>
-			<string>NumberPad</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>本机信息</string>
+			<string>低延迟 iOS 屏幕流传输与反向触控</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSTitleValueCell</string>
 			<key>label</key>
-			<string>本机 IP 地址</string>
+			<string>版本</string>
 			<key>key</key>
-			<string>deviceIP</string>
+			<string>version</string>
 			<key>defaults</key>
 			<string>com.hogan.iosscreenstream</string>
 			<key>default</key>
-			<string>未获取到</string>
+			<string>1.3.0</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>视频质量</string>
+			<string>服务设置</string>
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSSliderCell</string>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
+			<key>key</key>
+			<string>enabled</string>
 			<key>label</key>
-			<string>帧率 (FPS)</string>
+			<string>启用服务</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>网络设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>192.168.1.100</string>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
+			<key>key</key>
+			<string>client_ip</string>
+			<key>label</key>
+			<string>电脑 IP 地址</string>
+			<key>keyboard</key>
+			<string>numbersAndPunctuation</string>
+			<key>noAutoCorrect</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>5001</string>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
+			<key>key</key>
+			<string>video_port</string>
+			<key>label</key>
+			<string>视频端口 (UDP)</string>
+			<key>keyboard</key>
+			<string>numberPad</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>5002</string>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
+			<key>key</key>
+			<string>control_port</string>
+			<key>label</key>
+			<string>控制端口 (TCP)</string>
+			<key>keyboard</key>
+			<string>numberPad</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</key>
+			<key>label</key>
+			<string>视频设置</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>30</string>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
 			<key>key</key>
 			<string>fps</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<real>30</real>
-			<key>min</key>
-			<real>10</real>
-			<key>max</key>
-			<real>60</real>
-			<key>showValue</key>
-			<true/>
+			<key>label</key>
+			<string>帧率 (FPS)</string>
+			<key>keyboard</key>
+			<string>numberPad</string>
 		</dict>
 		<dict>
 			<key>cell</key>
-			<string>PSSliderCell</string>
-			<key>label</key>
-			<string>码率 (kbps)</string>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>2000</string>
+			<key>defaults</key>
+			<string>com.hogan.iosscreenstream</string>
 			<key>key</key>
 			<string>bitrate</string>
-			<key>defaults</key>
-			<string>com.hogan.iosscreenstream</string>
-			<key>default</key>
-			<real>2000</real>
-			<key>min</key>
-			<real>500</real>
-			<key>max</key>
-			<real>10000</real>
-			<key>showValue</key>
-			<true/>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSButtonCell</string>
 			<key>label</key>
-			<string>应用更改</string>
-			<key>action</key>
-			<string>applyChanges</string>
+			<string>码率 (kbps)</string>
+			<key>keyboard</key>
+			<string>numberPad</string>
 		</dict>
 	</array>
 </dict>

@@ -34,38 +34,22 @@
 ## 环境要求
 
 ### iOS 端
-- 越狱 iOS 设备（iOS 14-15，unc0ver）
+- 越狱 iOS 设备（iOS 14+）
 - **必须安装 TrollVNC**（提供 STHIDEventGenerator 触摸注入）
-- Theos（从源码编译时需要）
 
 ### PC 端
 - Python 3.8+
 - FFmpeg
 - numpy, opencv-python
 
-## 下载预编译包
+## 下载安装
 
-### GitHub Actions（推荐）
-
-1. 进入 [Actions](https://github.com/hogan-hong/iOSScreenStream/actions) 标签页
-2. 点击最新的工作流运行
-3. 下载 `iOSScreenStream` 产物
-
-### 手动编译
-
-```bash
-cd tweak
-make package
-```
-
-## 安装
-
-1. 将 `.deb` 文件拷贝到 iOS 设备
-2. 通过 Filza 或终端安装：
+1. 从 [Releases](https://github.com/hogan-hong/iOSScreenStream/releases) 下载最新 `.deb` 文件
+2. 拷贝到 iOS 设备并安装：
    ```bash
-   dpkg -i com.hogan.iosscreenstream_1.1.0-1_iphoneos-arm.deb
+   dpkg -i com.hogan.iosscreenstream_1.3.0_iphoneos-arm.deb
    ```
-3. **注意**：确保 TrollVNC 已安装
+3. 注销或重启 SpringBoard 使插件生效
 
 ## 配置
 
@@ -80,84 +64,69 @@ make package
 | 帧率 (FPS) | 30 | 目标帧率 |
 | 码率 (kbps) | 2000 | 视频码率 |
 
-修改设置后点击「应用更改」即可生效，无需重启。
+修改设置后注销 SpringBoard 生效。
 
-## 运行 PC 客户端
+## 项目结构
 
-```bash
-cd pc
-pip install -r requirements.txt
-
-# 单台设备
-python stream_client.py --ios-ip 192.168.1.101 --video-port 5001 --control-port 5002
-
-# 多台设备
-python multi_client.py --devices 5 --ip-prefix 192.168.1. --ip-start 101
+```
+tweak/
+├── Makefile                  # Theos 构建配置
+├── control                   # Debian 包元数据
+├── Filter.plist              # Cydia Substrate 过滤器
+├── entry.plist               # PreferenceLoader 入口配置
+├── src/                      # Tweak 源码
+│   ├── StreamTweak.mm        # 主入口
+│   ├── ScreenCapturer.mm     # IOSurface 屏幕捕获
+│   ├── VideoEncoder.mm       # VideoToolbox H.264 编码
+│   ├── StreamServer.mm       # UDP/TCP 服务器
+│   └── TouchController.mm   # 触摸事件注入
+├── prefs/
+│   └── ISSPrefsRootListController.mm  # 设置面板控制器
+├── prefs_bundle_resources/
+│   ├── Info.plist            # PreferenceBundle 信息（注意大写 I）
+│   ├── Root.plist            # 设置项定义
+│   ├── icon@2x.png           # 设置列表图标 @2x
+│   └── icon@3x.png           # 设置列表图标 @3x
+└── include/                  # 头文件
+    ├── Preferences/           # PSListController 等私有框架头文件
+    ├── IOKitSPI.h            # IOKit 私有接口
+    ├── IOSurfaceSPI.h        # IOSurface 私有接口
+    ├── STHIDEventGenerator.h # 触摸注入头文件
+    └── UIScreen+Private.h    # UIScreen 私有接口
 ```
 
-### PC 客户端操作
+## 更新日志
 
-- **鼠标左键按下** → 触摸按下
-- **鼠标左键释放** → 触摸抬起
-- **鼠标左键拖动** → 触摸移动
-- **按 Q 或 ESC** → 退出
+### v1.3.0 (2025-05-07)
+- **修复**：设置页面空白问题（Theos strip 移除了 ObjC 方法元数据，导致 PSListController 无法加载）
+  - 设置 `iOSScreenStreamPrefs_STRIP = 0` 禁止 strip
+  - 添加 `-ObjC` 链接器标志保留 ObjC 类信息
+- **修复**：设置列表缺少图标（添加 icon@2x.png、icon@3x.png）
+- **修复**：Info.plist 大小写问题（`info.plist` → `Info.plist`，iOS NSBundle 区分大小写）
+- **修复**：部署目标不匹配（minos 14.5 → 14.0，兼容 iOS 14.2 设备）
+- **修复**：设置页面基类错误（`PSListItemsController` → `PSListController`）
+- **修复**：PreferenceBundle 未链接 Preferences.framework
+- **修复**：CI 在大小写不敏感 APFS 上构建导致 Info.plist 文件名错误
+- **修复**：bundle 内存在多余的 Resources/ 子目录
+- **改进**：统一版本号至 1.3.0（之前 Makefile/control/Info.plist 版本不一致）
+- **改进**：更新 README 项目文档
 
-## 多设备配置
+### v1.1.0
+- 初始发布版本
+- IOSurface 屏幕捕获 + VideoToolbox H.264 编码
+- UDP 视频流传输 + TCP 反向触控
+- 基础设置面板
 
-5 台设备示例：
+## 编译
 
-| 设备 | IP | 视频端口 | 控制端口 |
-|------|-----|---------|---------|
-| iPhone-1 | 192.168.1.101 | 5001 | 5002 |
-| iPhone-2 | 192.168.1.102 | 5003 | 5004 |
-| iPhone-3 | 192.168.1.103 | 5005 | 5006 |
-| iPhone-4 | 192.168.1.104 | 5007 | 5008 |
-| iPhone-5 | 192.168.1.105 | 5009 | 5010 |
-
-每台 iPhone 的 iOSScreenStream 设置对应不同的端口。
-
-## 协议
-
-### 视频流 (UDP)
-- H.264 Annex B 格式 NAL 单元
-- 关键帧包含 SPS/PPS
-- 大包自动分片（≤1400字节/包），带头部：序号+总分包数+分包索引+总长度+偏移
-
-### 控制流 (TCP)
-- JSON 消息，换行符分隔
-- 触控事件：`{"type": "touch", "action": "down|up|move", "x": 0-1, "y": 0-1}`
-- 心跳：`{"type": "heartbeat"}`
-- 坐标归一化到 0~1（相对于屏幕）
-
-## 从源码编译
-
-### 前置条件
-
-- macOS + Xcode
-- [Theos](https://github.com/roothide/theos)
-- iOS SDK 14.5+
-
-### 编译步骤
+需要 macOS + Xcode + Theos 环境：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/hogan-hong/iOSScreenStream.git
-cd iOSScreenStream
-
-# 编译（GitHub Actions 会自动处理 TrollVNC 依赖）
+export THEOS=/path/to/theos
 cd tweak
 make package
 ```
 
-### GitHub Actions（免本地编译）
+## License
 
-推送到 main 分支或手动触发 workflow_dispatch 即可。
-
-## 基于
-
-- 屏幕捕获代码来自 [TrollVNC](https://github.com/hogan-hong/TrollVNC) by 82Flex
-- 触摸注入使用 TrollVNC 的 STHIDEventGenerator
-
-## 许可证
-
-GPL-2.0（与 TrollVNC 一致）
+MIT

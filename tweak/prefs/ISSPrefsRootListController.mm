@@ -1,5 +1,5 @@
 /*
- * iOSScreenStream - Settings page controller
+ * iOSScreenStream v1.3.0 - Settings page controller
  * Inherits from PSListController for root list display
  */
 
