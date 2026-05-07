@@ -27,6 +27,11 @@ iOSScreenStreamPrefs_PRIVATE_FRAMEWORKS = Preferences
 iOSScreenStreamPrefs_LDFLAGS = -ObjC
 iOSScreenStreamPrefs_BUNDLE_EXTENSION = bundle
 
+# CRITICAL: Do NOT strip the prefs bundle binary!
+# Theos strip removes all __text code and ObjC method metadata,
+# leaving a broken binary that crashes PSListController on load.
+iOSScreenStreamPrefs_STRIP = 0
+
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
 include $(THEOS_MAKE_PATH)/package.mk
