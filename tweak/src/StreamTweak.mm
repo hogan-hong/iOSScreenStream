@@ -127,6 +127,14 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
         int tmp = width; width = height; height = tmp;
     }
     
+    if (width == 0 || height == 0) {
+        TVLog(@"屏幕分辨率无效: %dx%d，2秒后重试", width, height);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self startStreaming];
+        });
+        return;
+    }
+    
     TVLog(@"屏幕分辨率: %dx%d", width, height);
     
     // 初始化编码器

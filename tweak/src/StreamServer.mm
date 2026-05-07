@@ -35,6 +35,7 @@
     int mUdpSocket;
     struct sockaddr_in mServerAddr;
     uint16_t mPacketSeq;  // 分包序号
+    BOOL mUdpConnected;   // 是否 connect 成功（决定用 send 还是 sendto）
     
     // TCP 控制通道（iOS 端监听）
     int mTcpListenSocket;
@@ -60,6 +61,7 @@
         mPacketSeq = 0;
         mHeartbeatTimer = nil;
         mLastHeartbeat = nil;
+        mUdpConnected = NO;
     }
     return self;
 }
@@ -94,11 +96,12 @@
     inet_pton(AF_INET, [mServerIP UTF8String], &mServerAddr.sin_addr);
     
     // 连接 UDP（方便用 send 而非 sendto）
+    // 注意：跨网段时 connect 可能失败但仍可发送，所以不阻断启动
     if (connect(mUdpSocket, (struct sockaddr *)&mServerAddr, sizeof(mServerAddr)) < 0) {
-        TVLog(@"UDP connect 失败");
-        close(mUdpSocket);
-        mUdpSocket = -1;
-        return NO;
+        TVLog(@"UDP connect 失败（跨网段可能正常），继续使用 sendto");
+        mUdpConnected = NO;
+    } else {
+        mUdpConnected = YES;
     }
     
     // 启动 TCP 监听（iOS 端作为服务端，等待 PC 连入）
@@ -252,6 +255,14 @@
 
 #pragma mark - UDP 视频分包发送
 
+- (ssize_t)udpSend:(const void *)buf length:(size_t)len {
+    if (mUdpConnected) {
+        return send(mUdpSocket, buf, len, 0);
+    } else {
+        return sendto(mUdpSocket, buf, len, 0, (struct sockaddr *)&mServerAddr, sizeof(mServerAddr));
+    }
+}
+
 - (void)sendVideoData:(NSData *)data isKeyFrame:(BOOL)isKeyFrame {
     if (!mIsRunning || mUdpSocket < 0) return;
     
@@ -264,7 +275,7 @@
         NSMutableData *packet = [NSMutableData dataWithCapacity:2 + totalLength];
         [packet appendBytes:&seq length:2];
         [packet appendBytes:dataBytes length:totalLength];
-        send(mUdpSocket, packet.bytes, packet.length, 0);
+        [self udpSend:packet.bytes length:packet.length];
     } else {
         // 大包：分包发送
         uint16_t seq = mPacketSeq++;
@@ -290,7 +301,7 @@
             // 数据
             [packet appendBytes:dataBytes + offset length:chunkLen];
             
-            ssize_t sent = send(mUdpSocket, packet.bytes, packet.length, 0);
+            ssize_t sent = [self udpSend:packet.bytes length:packet.length];
             if (sent < 0) {
                 TVLog(@"UDP 分包发送失败: part %d/%d", partIndex, totalParts);
                 break;

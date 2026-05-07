@@ -11,7 +11,7 @@
 #import "ScreenCapturer.h"
 #import "IOSurfaceSPI.h"
 #import "IOKitSPI.h"
-#import "UIScreen+Private.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,6 @@ void CARenderServerRenderDisplay(kern_return_t a, CFStringRef b, IOSurfaceRef su
 }
 #endif
 
-static BOOL gShouldApplyOrientationFix = YES;
 
 @implementation ScreenCapturer {
     NSDictionary *mRenderProperties;
@@ -52,19 +51,15 @@ static BOOL gShouldApplyOrientationFix = YES;
         return nil;
 
     int width, height;
-    CGSize screenSize = [[UIScreen mainScreen] _unjailedReferenceBoundsInPixels].size;
+    CGSize screenSize = [[UIScreen mainScreen] nativeBounds].size;
 
-#if !TARGET_IPHONE_SIMULATOR
-    if (gShouldApplyOrientationFix) {
-        width = (int)round(screenSize.height);
-        height = (int)round(screenSize.width);
-    } else {
-#endif
-        width = (int)round(screenSize.width);
-        height = (int)round(screenSize.height);
-#if !TARGET_IPHONE_SIMULATOR
+    // nativeBounds 返回竖屏方向像素尺寸 (width <= height)
+    // 无需手动交换，直接使用
+    width = (int)round(screenSize.width);
+    height = (int)round(screenSize.height);
+    if (width > height) {
+        int tmp = width; width = height; height = tmp;
     }
-#endif
 
     // Pixel format for Alpha, Red, Green and Blue
     unsigned pixelFormat = 0x42475241; // 'ARGB'
