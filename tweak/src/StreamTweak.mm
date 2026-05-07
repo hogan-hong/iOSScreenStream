@@ -36,22 +36,24 @@
 + (void)load {
     TVLog(@"iOSScreenStream 已加载");
     
-    StreamTweak *tweak = [[StreamTweak alloc] init];
-    [tweak loadSettings];
+    // 使用静态变量保持对象存活，防止 ARC 释放
+    static StreamTweak *sTweak = nil;
+    sTweak = [[StreamTweak alloc] init];
+    [sTweak loadSettings];
     
     // 监听设置变更
     CFNotificationCenterAddObserver(
         CFNotificationCenterGetDarwinNotifyCenter(),
-        (__bridge void *)tweak,
+        (__bridge void *)sTweak,
         settingsChangedCallback,
         CFSTR(kSettingsChangedNotification),
         NULL,
         CFNotificationSuspensionBehaviorDeliverImmediately
     );
     
-    if (tweak->mIsEnabled) {
+    if (sTweak->mIsEnabled) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [tweak startStreaming];
+            [sTweak startStreaming];
         });
     }
 }
