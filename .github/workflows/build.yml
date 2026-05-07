@@ -68,12 +68,9 @@ jobs:
 
       - name: 创建大小写敏感的磁盘映像
         run: |
-          # macOS APFS 默认不区分大小写，导致 Theos 生成的 info.plist 无法通过 cp Info.plist 修正大小写
-          # 创建一个区分大小写的 APFS 卷来做构建，确保 deb 内文件名正确
           hdiutil create -size 2g -type SPARSE -fs "Case-sensitive APFS" -volname theos_build /tmp/theos_build.sparseimage
           hdiutil mount /tmp/theos_build.sparseimage
           echo "大小写敏感卷已挂载: /Volumes/theos_build"
-          # 复制项目文件到该卷
           cp -R "$GITHUB_WORKSPACE/tweak" /Volumes/theos_build/tweak
           cp -R "$GITHUB_WORKSPACE/pc" /Volumes/theos_build/pc 2>/dev/null || true
 
@@ -86,7 +83,7 @@ jobs:
         env:
           THEOS: ${{ github.workspace }}/theos
 
-      - name: 修复 deb 中的文件名大小写
+      - name: 验证并修复 deb 包
         run: |
           DEB_FILE=$(ls /Volumes/theos_build/tweak/packages/*.deb 2>/dev/null | head -1)
           if [ -z "$DEB_FILE" ]; then
@@ -95,45 +92,39 @@ jobs:
           fi
           echo "deb 包: $DEB_FILE"
           
-          # 解压 deb，修正文件名，重新打包
-          # Theos 始终生成小写 info.plist，必须在 case-sensitive 卷上修正
-          REPACK_DIR="/tmp/deb_repack"
-          rm -rf "$REPACK_DIR"
-          dpkg-deb -R "$DEB_FILE" "$REPACK_DIR"
+          # 检查 deb 内容中 Info.plist 大小写是否正确
+          BUNDLE_INFO=$(dpkg-deb -c "$DEB_FILE" | grep -i 'PreferenceBundles.*info\.plist' || true)
+          echo "Bundle Info.plist: $BUNDLE_INFO"
           
-          BUNDLE_DIR="$REPACK_DIR/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle"
-          echo "===== 修正前 bundle 内容 ====="
-          ls -la "$BUNDLE_DIR/" 2>/dev/null || echo "bundle 目录不存在"
-          
-          # 修正 info.plist → Info.plist（iOS NSBundle 区分大小写）
-          if [ -f "$BUNDLE_DIR/info.plist" ]; then
-            mv "$BUNDLE_DIR/info.plist" "$BUNDLE_DIR/Info.plist"
-            echo "✅ 已修正 info.plist → Info.plist"
-          elif [ -f "$BUNDLE_DIR/Info.plist" ]; then
-            echo "✅ Info.plist 已是大写"
+          if echo "$BUNDLE_INFO" | grep -q '/Info\.plist'; then
+            echo "✅ Info.plist 大小写正确，无需 repack"
+            # 直接复制到工作目录
+            mkdir -p "$GITHUB_WORKSPACE/tweak/packages"
+            cp "$DEB_FILE" "$GITHUB_WORKSPACE/tweak/packages/"
+            echo "deb 已复制到工作目录"
           else
-            echo "⚠️ 未找到任何 info/Info.plist"
+            echo "⚠️ Info.plist 为小写，需要 repack..."
+            REPACK_DIR="/tmp/deb_repack"
+            rm -rf "$REPACK_DIR"
+            dpkg-deb -R "$DEB_FILE" "$REPACK_DIR"
+            
+            BUNDLE_DIR="$REPACK_DIR/Library/PreferenceBundles/iOSScreenStreamPrefs.bundle"
+            if [ -f "$BUNDLE_DIR/info.plist" ]; then
+              mv "$BUNDLE_DIR/info.plist" "$BUNDLE_DIR/Info.plist"
+              echo "✅ 已修正 info.plist → Info.plist"
+            fi
+            
+            FIXED_DEB="${DEB_FILE%.deb}_fixed.deb"
+            dpkg-deb -b "$REPACK_DIR" "$FIXED_DEB"
+            mv "$FIXED_DEB" "$DEB_FILE"
+            
+            mkdir -p "$GITHUB_WORKSPACE/tweak/packages"
+            cp "$DEB_FILE" "$GITHUB_WORKSPACE/tweak/packages/"
+            echo "repacked deb 已复制到工作目录"
           fi
           
-          echo "===== 修正后 bundle 内容 ====="
-          ls -la "$BUNDLE_DIR/"
-          
-          # 重新打包 deb
-          FIXED_DEB="${DEB_FILE%.deb}_fixed.deb"
-          dpkg-deb -b "$REPACK_DIR" "$FIXED_DEB"
-          
-          # 替换原文件
-          mv "$FIXED_DEB" "$DEB_FILE"
-          echo "✅ deb 已重新打包"
-          
-          # 复制回工作目录
-          mkdir -p "$GITHUB_WORKSPACE/tweak/packages"
-          cp "$DEB_FILE" "$GITHUB_WORKSPACE/tweak/packages/"
-          echo "deb 已复制回工作目录"
-          
-          # 验证最终 deb 内容
           echo "===== 验证最终 deb 内容 ====="
-          dpkg-deb -c "$DEB_FILE" | grep -i 'preferencebundles\|preferenceloader'
+          dpkg-deb -c "$GITHUB_WORKSPACE/tweak/packages/$(ls tweak/packages/*.deb | xargs basename)" | grep -i 'preferencebundles\|preferenceloader'
 
       - name: 构建结果诊断
         if: always()
@@ -149,7 +140,6 @@ jobs:
           if [ -n "$DEB_FILE" ]; then
             cp "$DEB_FILE" artifacts/ && echo "deb 已复制"
           else
-            # 尝试从卷上复制
             DEB_FILE=$(ls /Volumes/theos_build/tweak/packages/*.deb 2>/dev/null | head -1)
             if [ -n "$DEB_FILE" ]; then
               cp "$DEB_FILE" artifacts/ && echo "deb 从卷复制"
@@ -214,16 +204,19 @@ jobs:
             iOSScreenStream 自动构建
 
             版本: ${{ steps.version.outputs.version }}
-            提交: ${{ github.sha }}
+            提交: `${{ github.sha }}`
 
-            更新内容:
-            - 修复设置页空白（PSListController → PSListItemsController）
-            - 修复设置图标缺失（添加 icon@2x/@3x）
-            - 修复 Info.plist 大小写问题（macOS CI 大小写不敏感导致）
-            - 修复 TCP 控制通道方向
-            - 修复 VideoEncoder NAL 解析
-            - UDP 视频分包 + TCP 心跳保活
-            - PC 端自动检测分辨率
+            ## 更新内容
+
+            ### v1.3.0
+            - 修复：设置页面空白（Theos strip 移除 ObjC 元数据）
+            - 修复：设置列表缺少图标
+            - 修复：Info.plist 大小写问题
+            - 修复：部署目标 minos 不匹配
+            - 修复：设置页面基类错误
+            - 修复：PreferenceBundle 未链接 Preferences.framework
+            - 修复：CI 大小写敏感构建
+            - 统一版本号至 1.3.0
           files: release-packages/**/*
           draft: false
           prerelease: false
