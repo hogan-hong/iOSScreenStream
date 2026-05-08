@@ -288,11 +288,21 @@ static void diagAppend(NSString *msg) {
     NSUInteger totalLength = data.length;
     const uint8_t *dataBytes = (const uint8_t *)data.bytes;
     
+    // 统一使用 14 字节头格式，避免 PC 端误判分包
     if (totalLength <= UDP_MAX_PACKET_SIZE - PACKET_HEADER_SIZE) {
-        // 小包：加序号头直接发
+        // 小包：14 字节头（totalParts=1, partIndex=0）
         uint16_t seq = mPacketSeq++;
-        NSMutableData *packet = [NSMutableData dataWithCapacity:2 + totalLength];
+        uint16_t totalParts = 1;
+        uint16_t partIndex = 0;
+        uint32_t totalLenNet = htonl((uint32_t)totalLength);
+        uint32_t offsetNet = htonl(0);
+        
+        NSMutableData *packet = [NSMutableData dataWithCapacity:PACKET_HEADER_SIZE + totalLength];
         [packet appendBytes:&seq length:2];
+        [packet appendBytes:&totalParts length:2];
+        [packet appendBytes:&partIndex length:2];
+        [packet appendBytes:&totalLenNet length:4];
+        [packet appendBytes:&offsetNet length:4];
         [packet appendBytes:dataBytes length:totalLength];
         [self udpSend:packet.bytes length:packet.length];
     } else {

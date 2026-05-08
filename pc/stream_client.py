@@ -137,17 +137,26 @@ class iOSStreamClient:
                 if not data:
                     continue
 
-                # 判断是否是分包格式
-                if len(data) >= PACKET_HEADER_SIZE and self._is_fragmented(data):
-                    # 分包重组
-                    nal_data = self._reassemble_packet(data)
-                    if nal_data:
+                # 统一 14 字节头格式：seq(2) + totalParts(2) + partIndex(2) + totalLen(4) + offset(4)
+                if len(data) >= PACKET_HEADER_SIZE:
+                    seq, total_parts, part_index, total_len, offset = struct.unpack(
+                        '>HHHII', data[:PACKET_HEADER_SIZE]
+                    )
+                    payload = data[PACKET_HEADER_SIZE:]
+                    
+                    if total_parts == 1:
+                        # 小包，直接取 payload
+                        self._process_nal_data(payload)
+                    else:
+                        # 大包，需重组
+                        nal_data = self._reassemble_packet(seq, total_parts, part_index, total_len, offset, payload)
+                        if nal_data:
+                            self._process_nal_data(nal_data)
+                else:
+                    # 兼容旧格式：2字节序号 + 数据
+                    if len(data) >= 2:
+                        nal_data = data[2:]
                         self._process_nal_data(nal_data)
-                elif len(data) >= 2:
-                    # 简单格式：2字节序号 + Annex B 数据
-                    seq = struct.unpack('>H', data[:2])[0]
-                    nal_data = data[2:]
-                    self._process_nal_data(nal_data)
 
             except socket.timeout:
                 continue
@@ -155,23 +164,8 @@ class iOSStreamClient:
                 if self.running:
                     print(f"[视频] 接收错误: {e}")
 
-    def _is_fragmented(self, data):
-        """判断是否是分包数据"""
-        if len(data) < PACKET_HEADER_SIZE:
-            return False
-        seq, total_parts, part_index = struct.unpack('>HHH', data[:6])
-        return total_parts > 1 or part_index > 0
-
-    def _reassemble_packet(self, data):
+    def _reassemble_packet(self, seq, total_parts, part_index, total_len, offset, payload):
         """重组分包数据"""
-        if len(data) < PACKET_HEADER_SIZE:
-            return None
-
-        seq, total_parts, part_index, total_len, offset = struct.unpack(
-            '>HHHII', data[:PACKET_HEADER_SIZE]
-        )
-        payload = data[PACKET_HEADER_SIZE:]
-
         now = time.time()
 
         if seq not in self.packet_buffer:
@@ -183,7 +177,7 @@ class iOSStreamClient:
             }
 
         buf = self.packet_buffer[seq]
-        buf['parts'][part_index] = payload
+        buf['parts'][part_index] = (offset, payload)
 
         # 清理超时的分包（10秒）
         expired = [k for k, v in self.packet_buffer.items() if now - v['timestamp'] > 10]
@@ -192,16 +186,13 @@ class iOSStreamClient:
 
         # 检查是否收齐
         if len(buf['parts']) >= buf['total_parts']:
-            # 按索引排序拼接
+            # 按 offset 排序拼接
             result = bytearray(buf['total_len'])
-            for idx, part_data in buf['parts'].items():
-                # 每个分片的偏移在其 header 里，但我们没存 per-part offset
-                # 用 part_index * payload_size 近似
-                payload_size = UDP_MAX_PACKET_SIZE - PACKET_HEADER_SIZE
-                start = idx * payload_size
-                end = min(start + len(part_data), buf['total_len'])
-                if start < buf['total_len']:
-                    result[start:end] = part_data[:end - start]
+            for idx in sorted(buf['parts'].keys()):
+                off, part_data = buf['parts'][idx]
+                end = min(off + len(part_data), buf['total_len'])
+                if off < buf['total_len']:
+                    result[off:end] = part_data[:end - off]
 
             del self.packet_buffer[seq]
             return bytes(result[:buf['total_len']])
