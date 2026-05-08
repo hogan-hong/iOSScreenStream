@@ -61,18 +61,13 @@ class iOSStreamClient:
         control_thread = threading.Thread(target=self._control_keeper, daemon=True)
         control_thread.start()
 
-        # 等待分辨率检测或超时
-        print("[信息] 等待视频数据以检测分辨率...")
-        if self.resolution_detected.wait(timeout=10):
-            print(f"[信息] 检测到分辨率: {self.frame_width}x{self.frame_height}")
-        else:
-            # 默认 iPhone SE2 分辨率
-            print("[警告] 未检测到分辨率，使用默认值 750x1334")
-            self.frame_width = 750
-            self.frame_height = 1334
-
-        # 启动 FFmpeg 解码
+        # 立即启动 FFmpeg 解码（不等分辨率检测，让 FFmpeg 自己从流中检测）
+        print("[信息] 启动 FFmpeg 解码器...")
         self._start_ffmpeg()
+
+        # 从 FFmpeg stderr 读取分辨率
+        res_thread = threading.Thread(target=self._ffmpeg_resolution_detector, daemon=True)
+        res_thread.start()
 
         # 启动帧读取
         reader_thread = threading.Thread(target=self._ffmpeg_reader, daemon=True)
@@ -139,10 +134,9 @@ class iOSStreamClient:
                     continue
 
                 _dbg_count += 1
-                if _dbg_count <= 5:
+                if _dbg_count <= 20:
                     print(f"[DEBUG] UDP包#{_dbg_count} 来自{addr} 长度={len(data)} 前20字节={data[:20].hex()}")
-                    _dbg_first5.append((_dbg_count, addr, len(data)))
-                elif _dbg_count == 6:
+                elif _dbg_count == 21:
                     print(f"[DEBUG] 已收到{_dbg_count}个UDP包，后续不再打印...")
 
                 # 统一 14 字节头格式：seq(2) + totalParts(2) + partIndex(2) + totalLen(4) + offset(4)
@@ -152,7 +146,7 @@ class iOSStreamClient:
                     )
                     payload = data[PACKET_HEADER_SIZE:]
                     
-                    if _dbg_count <= 5:
+                    if _dbg_count <= 20:
                         print(f"[DEBUG] 解析头: seq={seq} totalParts={total_parts} partIndex={part_index} totalLen={total_len} offset={offset} payloadLen={len(payload)}")
                     
                     if total_parts == 1:
@@ -190,6 +184,12 @@ class iOSStreamClient:
         buf = self.packet_buffer[seq]
         buf['parts'][part_index] = (offset, payload)
 
+        if not hasattr(self, '_reassemble_dbg_count'):
+            self._reassemble_dbg_count = 0
+        self._reassemble_dbg_count += 1
+        if self._reassemble_dbg_count <= 10:
+            print(f"[DEBUG] 重组 seq={seq} part={part_index}/{total_parts} offset={offset} payloadLen={len(payload)} 已收={len(buf['parts'])}个")
+
         # 清理超时的分包（10秒）
         expired = [k for k, v in self.packet_buffer.items() if now - v['timestamp'] > 10]
         for k in expired:
@@ -206,6 +206,7 @@ class iOSStreamClient:
                     result[off:end] = part_data[:end - off]
 
             del self.packet_buffer[seq]
+            print(f"[DEBUG] 重组完成 seq={seq} totalLen={buf['total_len']}")
             return bytes(result[:buf['total_len']])
 
         return None
@@ -219,13 +220,22 @@ class iOSStreamClient:
         if not hasattr(self, '_nal_dbg_count'):
             self._nal_dbg_count = 0
         self._nal_dbg_count += 1
-        if self._nal_dbg_count <= 5:
+        if self._nal_dbg_count <= 20:
             nal_type = nal_data[4] if len(nal_data) > 4 else -1
-            print(f"[DEBUG] NAL#{self._nal_dbg_count} 长度={len(nal_data)} NAL_type=0x{nal_type:02x} 前20字节={nal_data[:20].hex()}")
+            # H.264 NAL type: (byte >> 1) & 0x3f for first byte after start code
+            # Annex B start code: 00 00 00 01, so byte[4] is the NAL header
+            # H.264: forbidden_zero_bit(1) + nal_ref_idc(2) + nal_unit_type(5)
+            h264_nal_type = (nal_type >> 0) & 0x1F
+            print(f"[DEBUG] NAL#{self._nal_dbg_count} 长度={len(nal_data)} 原始byte=0x{nal_type:02x} H264_type={h264_nal_type} 前20字节={nal_data[:20].hex()}")
 
-        # 检测 SPS 以获取分辨率
-        if len(nal_data) > 5 and nal_data[4] == 0x67:  # NAL type 7 = SPS
-            self._detect_resolution_from_sps(nal_data[4:])
+        # 检测 SPS/PPS 以获取分辨率
+        # H.264: NAL type 7 (0x67), HEVC: NAL type 32/33 (VPS/SPS)
+        if len(nal_data) > 5:
+            nal_type_byte = nal_data[4]
+            if nal_type_byte == 0x67:  # H.264 SPS
+                self._detect_resolution_from_sps(nal_data[4:])
+            elif nal_type_byte in (0x40, 0x42):  # HEVC VPS(0x40) or SPS(0x42)
+                self._detect_resolution_from_hevc_sps(nal_data[4:])
 
         # 写入 FFmpeg
         if self.ffmpeg_proc and self.ffmpeg_proc.stdin:
@@ -236,16 +246,12 @@ class iOSStreamClient:
                 pass
 
     def _detect_resolution_from_sps(self, sps_data):
-        """从 SPS 中解析分辨率"""
-        try:
-            # 简易 SPS 解析（不完美但对常见 profile 够用）
-            if len(sps_data) < 4:
-                return
+        """从 H.264 SPS 中解析分辨率（简易版）"""
+        pass  # FFmpeg 自动探测更可靠
 
-            # 用 FFmpeg 探测更靠谱
-            pass
-        except Exception:
-            pass
+    def _detect_resolution_from_hevc_sps(self, sps_data):
+        """从 HEVC SPS 中解析分辨率（简易版）"""
+        pass  # FFmpeg 自动探测更可靠
 
     def _start_ffmpeg(self):
         """启动 FFmpeg 解码进程"""
@@ -256,7 +262,7 @@ class iOSStreamClient:
             '-fflags', 'nobuffer',
             '-fflags', 'discardcorrupt',
             '-max_delay', '500000',
-            '-f', 'h264',  # 输入 Annex B H.264
+            '-f', 'h264',  # 输入 Annex B H.264 (iOS VideoToolbox kCMVideoCodecType_H264)
             '-i', 'pipe:0',
             '-f', 'rawvideo',
             '-pix_fmt', 'bgr24',
@@ -267,12 +273,48 @@ class iOSStreamClient:
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL  # 屏蔽 FFmpeg 的冗余输出
+            stderr=subprocess.PIPE  # 读取 stderr 获取分辨率
         )
         print("[视频] FFmpeg 解码器已启动")
 
-        # 监听 FFmpeg stderr 获取分辨率
-        # 这里用另一种方式：从输出帧大小反推
+    def _ffmpeg_resolution_detector(self):
+        """从 FFmpeg stderr 检测分辨率"""
+        if not self.ffmpeg_proc or not self.ffmpeg_proc.stderr:
+            return
+        try:
+            # FFmpeg 在开始解码时会输出流信息到 stderr
+            # 格式如: Stream #0:0: Video: hevc, ... 750x1334
+            import re
+            buf = b''
+            while self.running and self.ffmpeg_proc.stderr:
+                chunk = self.ffmpeg_proc.stderr.read(1)
+                if not chunk:
+                    break
+                buf += chunk
+                # 检查是否有分辨率信息
+                text = buf.decode('utf-8', errors='ignore')
+                m = re.search(r'(\d{3,4})x(\d{3,4})', text)
+                if m and not self.resolution_detected.is_set():
+                    w, h = int(m.group(1)), int(m.group(2))
+                    # 验证：宽高至少 100，且乘积合理
+                    if w >= 100 and h >= 100 and w * h < 10000000:
+                        self.frame_width = w
+                        self.frame_height = h
+                        self.resolution_detected.set()
+                        print(f"[信息] FFmpeg 检测到分辨率: {w}x{h}")
+                        return
+                # 限制 buf 大小，避免无限增长
+                if len(buf) > 4096:
+                    buf = buf[-2048:]
+        except Exception as e:
+            print(f"[视频] 分辨率检测异常: {e}")
+
+        # 如果从 stderr 没检测到，用默认值
+        if not self.resolution_detected.is_set():
+            self.frame_width = 750
+            self.frame_height = 1334
+            self.resolution_detected.set()
+            print("[警告] 未从 FFmpeg 检测到分辨率，使用默认值 750x1334")
 
     def _ffmpeg_reader(self):
         """从 FFmpeg 读取解码后的帧"""
