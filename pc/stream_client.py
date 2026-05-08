@@ -257,7 +257,7 @@ class iOSStreamClient:
         """启动 FFmpeg 解码进程"""
         cmd = [
             'ffmpeg',
-            '-probesize', '32',
+            '-probesize', '32768',  # 需要足够大以包含 SPS/PPS
             '-flags', 'low_delay',
             '-fflags', 'nobuffer',
             '-fflags', 'discardcorrupt',
@@ -283,7 +283,8 @@ class iOSStreamClient:
             return
         try:
             # FFmpeg 在开始解码时会输出流信息到 stderr
-            # 格式如: Stream #0:0: Video: hevc, ... 750x1334
+            # 格式如: Stream #0:0: Video: h264, ... 750x1334, ...
+            # 策略：先读完一整块数据再匹配，避免 750x133 这种部分匹配
             import re
             buf = b''
             while self.running and self.ffmpeg_proc.stderr:
@@ -291,9 +292,10 @@ class iOSStreamClient:
                 if not chunk:
                     break
                 buf += chunk
-                # 检查是否有分辨率信息
+                # 等 'x' 后面至少读够4位数字再尝试匹配
                 text = buf.decode('utf-8', errors='ignore')
-                m = re.search(r'(\d{3,4})x(\d{3,4})', text)
+                # 在 Stream 行的上下文中找分辨率：必须有逗号或空格跟在后面
+                m = re.search(r'(\d{3,4})x(\d{3,4})[\s,\[]', text)
                 if m and not self.resolution_detected.is_set():
                     w, h = int(m.group(1)), int(m.group(2))
                     # 验证：宽高至少 100，且乘积合理
@@ -303,9 +305,9 @@ class iOSStreamClient:
                         self.resolution_detected.set()
                         print(f"[信息] FFmpeg 检测到分辨率: {w}x{h}")
                         return
-                # 限制 buf 大小，避免无限增长
-                if len(buf) > 4096:
-                    buf = buf[-2048:]
+                # 限制 buf 大小
+                if len(buf) > 8192:
+                    buf = buf[-4096:]
         except Exception as e:
             print(f"[视频] 分辨率检测异常: {e}")
 
