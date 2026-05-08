@@ -17,6 +17,11 @@ iOSScreenStream_CFLAGS += -I$(THEOS_INCLUDE_PATH)/TrollVNC -I./include
 iOSScreenStream_FILES := $(wildcard src/*.mm)
 iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
 
+# CRITICAL: Do NOT strip the tweak dylib!
+# Theos strip removes all __text code, __mod_init_func, and __objc data,
+# leaving a broken dylib that loads but does nothing.
+iOSScreenStream_STRIP = 0
+
 # ===== Preference Bundle =====
 BUNDLE_NAME := iOSScreenStreamPrefs
 iOSScreenStreamPrefs_INSTALL_PATH = /Library/PreferenceBundles
