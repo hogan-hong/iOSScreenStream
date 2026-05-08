@@ -93,17 +93,17 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
     mFPS = 30;
     mBitrate = 2000000;
     
-    // 从偏好设置读取
+    // 从偏好设置读取（key 必须与 Root.plist 中的 key 一致）
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:PREFS_ID];
     
     mIsEnabled = [defaults boolForKey:@"enabled"];
-    NSString *ip = [defaults stringForKey:@"serverIP"];
+    NSString *ip = [defaults stringForKey:@"client_ip"];
     if (ip.length > 0) mServerIP = ip;
     
-    int vp = (int)[defaults integerForKey:@"videoPort"];
+    int vp = (int)[defaults integerForKey:@"video_port"];
     if (vp > 0) mVideoPort = vp;
     
-    int cp = (int)[defaults integerForKey:@"controlPort"];
+    int cp = (int)[defaults integerForKey:@"control_port"];
     if (cp > 0) mControlPort = cp;
     
     int fps = (int)[defaults integerForKey:@"fps"];
