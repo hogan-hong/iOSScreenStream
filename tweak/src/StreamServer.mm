@@ -22,6 +22,16 @@
 // 心跳间隔（秒）
 #define HEARTBEAT_INTERVAL 5.0
 
+// 诊断辅助：追加字符串到文件
+static void diagAppend(NSString *msg) {
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:@"/tmp/iosscreenstream_diag.txt"];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:[msg dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh closeFile];
+    }
+}
+
 @interface StreamServer () <NSStreamDelegate>
 @end
 
@@ -265,6 +275,15 @@
 
 - (void)sendVideoData:(NSData *)data isKeyFrame:(BOOL)isKeyFrame {
     if (!mIsRunning || mUdpSocket < 0) return;
+    
+    // 诊断：首次发送写日志
+    static BOOL sFirstSend = NO;
+    if (!sFirstSend) {
+        sFirstSend = YES;
+        NSString *msg = [NSString stringWithFormat:@"FIRST_UDP_SEND dest=%@:%d size=%lu key=%d\n", 
+              mServerIP, mVideoPort, (unsigned long)data.length, isKeyFrame];
+        diagAppend(msg);
+    }
     
     NSUInteger totalLength = data.length;
     const uint8_t *dataBytes = (const uint8_t *)data.bytes;

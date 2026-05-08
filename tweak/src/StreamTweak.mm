@@ -17,6 +17,16 @@
 #define kSettingsChangedNotification "com.hogan.iosscreenstream.settingsChanged"
 #define PREFS_ID @"com.hogan.iosscreenstream"
 
+// 诊断辅助：追加字符串到文件
+static void diagAppend(NSString *msg) {
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:@"/tmp/iosscreenstream_diag.txt"];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:[msg dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh closeFile];
+    }
+}
+
 @interface StreamTweak () <VideoEncoderDelegate, StreamServerDelegate>
 @end
 
@@ -100,10 +110,13 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
     NSString *ip = [defaults stringForKey:@"client_ip"];
     if (ip.length > 0) mServerIP = ip;
     
+    // 也检查旧 key（兼容旧版设置页写入的数据）
     int vp = (int)[defaults integerForKey:@"video_port"];
+    if (vp == 0) vp = (int)[defaults integerForKey:@"videoPort"];
     if (vp > 0) mVideoPort = vp;
     
     int cp = (int)[defaults integerForKey:@"control_port"];
+    if (cp == 0) cp = (int)[defaults integerForKey:@"controlPort"];
     if (cp > 0) mControlPort = cp;
     
     int fps = (int)[defaults integerForKey:@"fps"];
@@ -114,6 +127,11 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
     
     TVLog(@"设置已加载: 启用=%d, 服务端=%@:%d/%d, 帧率=%d, 码率=%d",
           mIsEnabled, mServerIP, mVideoPort, mControlPort, mFPS, mBitrate);
+    
+    // 写诊断文件（排查问题时用）
+    NSString *diag = [NSString stringWithFormat:@"enabled=%d\nip=%@\nvideoPort=%d\ncontrolPort=%d\nfps=%d\nbitrate=%d\ntime=%@\n",
+          mIsEnabled, mServerIP, mVideoPort, mControlPort, mFPS, mBitrate, [NSDate date]];
+    [diag writeToFile:@"/tmp/iosscreenstream_diag.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 - (void)startStreaming {
@@ -161,6 +179,11 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
     }];
     
     TVLog(@"流服务已启动");
+    
+    // 写诊断文件
+    NSString *diag2 = [NSString stringWithFormat:@"STREAMING_STARTED\nip=%@\nvideoPort=%d\ncontrolPort=%d\nresolution=%dx%d\nfps=%d\nbitrate=%d\ntime=%@\n",
+          mServerIP, mVideoPort, mControlPort, width, height, mFPS, mBitrate, [NSDate date]];
+    diagAppend(diag2);
 }
 
 - (void)stopStreaming {
@@ -181,6 +204,21 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
 
 - (void)videoEncoder:(id)encoder didEncodeData:(NSData *)data isKeyFrame:(BOOL)isKeyFrame {
     [mServer sendVideoData:data isKeyFrame:isKeyFrame];
+    
+    // 诊断：每 100 帧写一次日志
+    static int sFrameCount = 0;
+    static NSDate *sFirstFrame = nil;
+    sFrameCount++;
+    if (sFirstFrame == nil) sFirstFrame = [NSDate date];
+    if (sFrameCount == 1) {
+        NSString *msg = [NSString stringWithFormat:@"FIRST_ENCODED_FRAME size=%lu key=%d time=%@\n", (unsigned long)data.length, isKeyFrame, [NSDate date]];
+        diagAppend(msg);
+    }
+    if (sFrameCount % 100 == 0) {
+        NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:sFirstFrame];
+        NSString *msg = [NSString stringWithFormat:@"ENCODED_%d_FRAMES elapsed=%.1fs\n", sFrameCount, elapsed];
+        diagAppend(msg);
+    }
 }
 
 #pragma mark - StreamServerDelegate
