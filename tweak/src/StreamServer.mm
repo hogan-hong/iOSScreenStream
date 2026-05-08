@@ -288,12 +288,12 @@ static void diagAppend(NSString *msg) {
     NSUInteger totalLength = data.length;
     const uint8_t *dataBytes = (const uint8_t *)data.bytes;
     
-    // 统一使用 14 字节头格式，避免 PC 端误判分包
+    // 统一使用 14 字节头格式（全部网络字节序），避免 PC 端误判分包
     if (totalLength <= UDP_MAX_PACKET_SIZE - PACKET_HEADER_SIZE) {
         // 小包：14 字节头（totalParts=1, partIndex=0）
-        uint16_t seq = mPacketSeq++;
-        uint16_t totalParts = 1;
-        uint16_t partIndex = 0;
+        uint16_t seq = htons(mPacketSeq++);
+        uint16_t totalParts = htons(1);
+        uint16_t partIndex = htons(0);
         uint32_t totalLenNet = htonl((uint32_t)totalLength);
         uint32_t offsetNet = htonl(0);
         
@@ -318,12 +318,15 @@ static void diagAppend(NSString *msg) {
             
             NSMutableData *packet = [NSMutableData dataWithCapacity:PACKET_HEADER_SIZE + chunkLen];
             
-            // 分包头
+            // 分包头（全部网络字节序）
+            uint16_t seqNet = htons(seq);
+            uint16_t totalPartsNet = htons(totalParts);
+            uint16_t partIndexNet = htons(partIndex);
             uint32_t totalLenNet = htonl((uint32_t)totalLength);
             uint32_t offsetNet = htonl((uint32_t)offset);
-            [packet appendBytes:&seq length:2];           // 2字节序号
-            [packet appendBytes:&totalParts length:2];     // 2字节总分包数
-            [packet appendBytes:&partIndex length:2];      // 2字节当前分包索引
+            [packet appendBytes:&seqNet length:2];           // 2字节序号
+            [packet appendBytes:&totalPartsNet length:2];     // 2字节总分包数
+            [packet appendBytes:&partIndexNet length:2];      // 2字节当前分包索引
             [packet appendBytes:&totalLenNet length:4];    // 4字节总长度
             [packet appendBytes:&offsetNet length:4];      // 4字节偏移
             
