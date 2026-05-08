@@ -9,6 +9,8 @@
  * Weak definitions allow the dylib to load without them.
  */
 
+#import <Foundation/Foundation.h>
+
 // gShouldApplyOrientationFix — iPad orientation fix flag
 // Default NO (we handle orientation ourselves)
 BOOL gShouldApplyOrientationFix __attribute__((weak)) = NO;
