@@ -2,11 +2,17 @@ THEOS_DEVICE_IP ?= localhost
 THEOS_DEVICE_PORT ?= 2222
 
 PACKAGE_NAME := com.hogan.iosscreenstream
-PACKAGE_VERSION := 1.3.0
+PACKAGE_VERSION := 1.3.1
 PACKAGE_ARCH := iphoneos-arm
 PKG_DEBIAN := com.hogan.iosscreenstream
 
 TARGET = iphone:14.5:14.0
+
+# CRITICAL: Disable Theos strip for ALL targets (tweak dylib + prefs bundle).
+# Theos strip is aggressively removing __text code, __mod_init_func, and
+# __objc_data sections, leaving broken binaries that load but do nothing.
+# This must be set BEFORE including common.mk.
+STRIP = 0
 
 include $(THEOS)/makefiles/common.mk
 
@@ -16,11 +22,6 @@ iOSScreenStream_CFLAGS := -fobjc-arc -O3 -Wno-unknown-warning-option
 iOSScreenStream_CFLAGS += -I$(THEOS_INCLUDE_PATH)/TrollVNC -I./include
 iOSScreenStream_FILES := $(wildcard src/*.mm)
 iOSScreenStream_LDFLAGS := -undefined dynamic_lookup
-
-# CRITICAL: Do NOT strip the tweak dylib!
-# Theos strip removes all __text code, __mod_init_func, and __objc data,
-# leaving a broken dylib that loads but does nothing.
-iOSScreenStream_STRIP = 0
 
 # ===== Preference Bundle =====
 BUNDLE_NAME := iOSScreenStreamPrefs
@@ -32,10 +33,7 @@ iOSScreenStreamPrefs_PRIVATE_FRAMEWORKS = Preferences
 iOSScreenStreamPrefs_LDFLAGS = -ObjC
 iOSScreenStreamPrefs_BUNDLE_EXTENSION = bundle
 
-# CRITICAL: Do NOT strip the prefs bundle binary!
-# Theos strip removes all __text code and ObjC method metadata,
-# leaving a broken binary that crashes PSListController on load.
-iOSScreenStreamPrefs_STRIP = 0
+# (Strip disabled globally above — no per-target override needed)
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
