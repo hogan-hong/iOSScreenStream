@@ -128,8 +128,9 @@ class iOSStreamClient:
 
         print(f"[视频] 监听 UDP 端口 {self.video_port}")
 
-        # 累积 Annex B 数据，按 NAL 单元喂给 FFmpeg
-        nal_buffer = bytearray()
+        # 调试计数
+        _dbg_count = 0
+        _dbg_first5 = []
 
         while self.running:
             try:
@@ -137,12 +138,22 @@ class iOSStreamClient:
                 if not data:
                     continue
 
+                _dbg_count += 1
+                if _dbg_count <= 5:
+                    print(f"[DEBUG] UDP包#{_dbg_count} 来自{addr} 长度={len(data)} 前20字节={data[:20].hex()}")
+                    _dbg_first5.append((_dbg_count, addr, len(data)))
+                elif _dbg_count == 6:
+                    print(f"[DEBUG] 已收到{_dbg_count}个UDP包，后续不再打印...")
+
                 # 统一 14 字节头格式：seq(2) + totalParts(2) + partIndex(2) + totalLen(4) + offset(4)
                 if len(data) >= PACKET_HEADER_SIZE:
                     seq, total_parts, part_index, total_len, offset = struct.unpack(
                         '>HHHII', data[:PACKET_HEADER_SIZE]
                     )
                     payload = data[PACKET_HEADER_SIZE:]
+                    
+                    if _dbg_count <= 5:
+                        print(f"[DEBUG] 解析头: seq={seq} totalParts={total_parts} partIndex={part_index} totalLen={total_len} offset={offset} payloadLen={len(payload)}")
                     
                     if total_parts == 1:
                         # 小包，直接取 payload
@@ -203,6 +214,14 @@ class iOSStreamClient:
         """处理 NAL 数据，检测分辨率，喂给 FFmpeg"""
         if not nal_data:
             return
+
+        # 调试：前5次打印 NAL 信息
+        if not hasattr(self, '_nal_dbg_count'):
+            self._nal_dbg_count = 0
+        self._nal_dbg_count += 1
+        if self._nal_dbg_count <= 5:
+            nal_type = nal_data[4] if len(nal_data) > 4 else -1
+            print(f"[DEBUG] NAL#{self._nal_dbg_count} 长度={len(nal_data)} NAL_type=0x{nal_type:02x} 前20字节={nal_data[:20].hex()}")
 
         # 检测 SPS 以获取分辨率
         if len(nal_data) > 5 and nal_data[4] == 0x67:  # NAL type 7 = SPS
