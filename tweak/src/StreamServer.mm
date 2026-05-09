@@ -423,7 +423,7 @@ static void diagAppend(NSString *msg) {
 }
 
 - (void)handleTouchMessage:(NSDictionary *)msg {
-    NSString *action = msg[@"action"]];
+    NSString *action = msg[@"action"];
     CGFloat x = [msg[@"x"] floatValue];
     CGFloat y = [msg[@"y"] floatValue];
     
