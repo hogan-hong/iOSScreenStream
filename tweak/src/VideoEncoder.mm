@@ -21,6 +21,9 @@
     NSData *mSPS;
     NSData *mPPS;
     BOOL mSPSPPSSent;
+    
+    // 强制关键帧标记
+    BOOL mForceNextKeyframe;
 }
 
 - (instancetype)initWithWidth:(int)width height:(int)height bitrate:(int)bitrate fps:(int)fps {
@@ -36,6 +39,7 @@
         mSPS = nil;
         mPPS = nil;
         mSPSPPSSent = NO;
+        mForceNextKeyframe = NO;
     }
     return self;
 }
@@ -55,11 +59,8 @@
     // 重置 SPS/PPS 发送标记，确保下次关键帧带上 SPS/PPS
     mSPSPPSSent = NO;
     
-    // 设置 ForceKeyFrame 属性，让下一个编码帧成为 IDR 关键帧
-    // 使用字符串值而非常量符号，兼容旧版 iOS SDK
-    VTSessionSetProperty(mSession,
-                         CFSTR("ForceKeyFrame"),
-                         kCFBooleanTrue);
+    // 标记下一帧需要强制为关键帧
+    mForceNextKeyframe = YES;
 }
 
 - (void)startEncoding {
@@ -121,6 +122,7 @@
     
     mIsEncoding = YES;
     mSPSPPSSent = NO;
+    mForceNextKeyframe = NO;
     TVLog(@"视频编码器已启动: %dx%d @ %d kbps %d fps", mWidth, mHeight, mBitrate / 1000, mFps);
 }
 
@@ -134,6 +136,7 @@
     mSPS = nil;
     mPPS = nil;
     mSPSPPSSent = NO;
+    mForceNextKeyframe = NO;
     
     TVLog(@"视频编码器已停止");
 }
@@ -146,16 +149,30 @@
     
     CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
     
+    // 如果需要强制关键帧，通过帧属性传递
+    CFDictionaryRef frameProperties = NULL;
+    if (mForceNextKeyframe) {
+        mForceNextKeyframe = NO;
+        const void *keys[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
+        const void *values[] = { kCFBooleanTrue };
+        frameProperties = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        TVLog(@"强制关键帧: 通过帧属性请求");
+    }
+    
     VTEncodeInfoFlags infoFlags;
     OSStatus status = VTCompressionSessionEncodeFrame(
         mSession,
         pixelBuffer,
         presentationTime,
         kCMTimeInvalid,
-        NULL,
+        frameProperties,
         (__bridge void *)self,
         &infoFlags
     );
+    
+    if (frameProperties) {
+        CFRelease(frameProperties);
+    }
     
     if (status != noErr) {
         TVLog(@"编码帧失败: %d", status);

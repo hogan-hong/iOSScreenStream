@@ -46,6 +46,11 @@ class iOSStreamClient:
         self._ffmpeg_queue_lock = threading.Lock()
         self._ffmpeg_queue_event = threading.Event()
 
+        # SPS/PPS 跟踪（未收到关键帧前持续请求）
+        self._sps_received = False
+        self._keyframe_request_count = 0
+        self._max_keyframe_requests = 30  # 最多请求30次（约15秒）
+
         # 控制连接
         self.control_socket = None
         self.control_lock = threading.Lock()
@@ -231,30 +236,71 @@ class iOSStreamClient:
 
     def _process_nal_data(self, nal_data):
         """处理 NAL 数据，检测分辨率，喂给 FFmpeg"""
-        if not nal_data:
+        if not nal_data or len(nal_data) < 5:
             return
 
-        # 调试：前5次打印 NAL 信息
+        # 检测 NAL 类型
+        # 跳过 Annex B start code (00 00 00 01) 找到 NAL header
+        nal_offset = 0
+        if nal_data[0:4] == b'\x00\x00\x00\x01':
+            nal_offset = 4
+        elif nal_data[0:3] == b'\x00\x00\x01':
+            nal_offset = 3
+        
+        if nal_offset >= len(nal_data):
+            return
+
+        nal_type_byte = nal_data[nal_offset]
+        h264_nal_type = (nal_type_byte >> 0) & 0x1F
+
+        # 调试：前20次打印 NAL 信息
         if not hasattr(self, '_nal_dbg_count'):
             self._nal_dbg_count = 0
         self._nal_dbg_count += 1
         if self._nal_dbg_count <= 20:
-            nal_type = nal_data[4] if len(nal_data) > 4 else -1
-            h264_nal_type = (nal_type >> 0) & 0x1F
-            print(f"[DEBUG] NAL#{self._nal_dbg_count} 长度={len(nal_data)} 原始byte=0x{nal_type:02x} H264_type={h264_nal_type} 前20字节={nal_data[:20].hex()}")
+            print(f"[DEBUG] NAL#{self._nal_dbg_count} 长度={len(nal_data)} NAL_type={h264_nal_type} 前20字节={nal_data[:20].hex()}")
 
-        # 检测 SPS/PPS 以获取分辨率
-        if len(nal_data) > 5:
-            nal_type_byte = nal_data[4]
-            if nal_type_byte == 0x67:  # H.264 SPS
-                self._detect_resolution_from_sps(nal_data[4:])
-            elif nal_type_byte in (0x40, 0x42):  # HEVC VPS/SPS
-                self._detect_resolution_from_hevc_sps(nal_data[4:])
+        # 检测 SPS/PPS/IDR
+        if h264_nal_type == 7:  # SPS
+            self._sps_received = True
+            print(f"[视频] 收到 SPS (序列参数集)，长度={len(nal_data)}")
+        elif h264_nal_type == 8:  # PPS
+            print(f"[视频] 收到 PPS (图像参数集)，长度={len(nal_data)}")
+        elif h264_nal_type == 5:  # IDR 关键帧
+            print(f"[视频] 收到 IDR 关键帧，长度={len(nal_data)}")
+        elif h264_nal_type == 1:  # P 帧
+            # 未收到 SPS/PPS 时丢弃 P 帧（FFmpeg 无法解码）
+            if not self._sps_received:
+                if self._nal_dbg_count <= 30:
+                    print(f"[视频] 丢弃 P 帧（尚未收到 SPS/PPS），请求关键帧...")
+                # 持续请求关键帧直到收到
+                self._request_keyframe_periodic()
+                return
+
+        # 检测 SPS 以获取分辨率
+        if h264_nal_type == 7:
+            self._detect_resolution_from_sps(nal_data[nal_offset:])
+        elif h264_nal_type in (0x20, 0x21):  # HEVC VPS/SPS
+            self._detect_resolution_from_hevc_sps(nal_data[nal_offset:])
 
         # 异步写入 FFmpeg（避免阻塞 UDP 接收线程）
         with self._ffmpeg_queue_lock:
             self._ffmpeg_queue.append(nal_data)
         self._ffmpeg_queue_event.set()
+
+    def _request_keyframe_periodic(self):
+        """持续请求关键帧，直到收到 SPS/PPS 或达到最大请求次数"""
+        if self._sps_received:
+            return
+        if self._keyframe_request_count >= self._max_keyframe_requests:
+            if self._keyframe_request_count == self._max_keyframe_requests:
+                print(f"[警告] 已请求关键帧{self._max_keyframe_requests}次仍未收到 SPS/PPS")
+            self._keyframe_request_count += 1
+            return
+        self._keyframe_request_count += 1
+        if self._keyframe_request_count <= 5 or self._keyframe_request_count % 10 == 0:
+            print(f"[控制] 请求关键帧 (第{self._keyframe_request_count}次)")
+        self._request_keyframe()
 
     def _detect_resolution_from_sps(self, sps_data):
         """从 H.264 SPS 中解析分辨率（简易版）"""
@@ -572,9 +618,9 @@ class iOSStreamClient:
         try:
             msg = json.dumps({"type": "request_keyframe"}) + "\n"
             sock.send(msg.encode())
-            print("[控制] 已请求关键帧")
         except Exception as e:
-            print(f"[控制] 请求关键帧失败: {e}")
+            if self._keyframe_request_count <= 3:
+                print(f"[控制] 请求关键帧失败: {e}")
 
     def send_touch(self, action, x, y):
         """发送触控指令（供外部调用）"""
