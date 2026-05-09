@@ -16,6 +16,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)touchUpAtPoint:(CGPoint)point;
 - (void)touchMoveToPoint:(CGPoint)point;
 - (void)tapAtPoint:(CGPoint)point;
+- (void)longPressAtPoint:(CGPoint)point;
+- (void)scrollAtPoint:(CGPoint)point direction:(int)direction;
 
 @end
 

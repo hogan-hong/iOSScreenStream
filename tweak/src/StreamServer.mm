@@ -5,6 +5,7 @@
  */
 
 #import "StreamServer.h"
+#import "TouchController.h"
 #import "Logging.h"
 #import <UIKit/UIKit.h>
 
@@ -422,7 +423,7 @@ static void diagAppend(NSString *msg) {
 }
 
 - (void)handleTouchMessage:(NSDictionary *)msg {
-    NSString *action = msg[@"action"];
+    NSString *action = msg[@"action"]];
     CGFloat x = [msg[@"x"] floatValue];
     CGFloat y = [msg[@"y"] floatValue];
     
@@ -430,12 +431,21 @@ static void diagAppend(NSString *msg) {
     CGSize screenSize = [[UIScreen mainScreen] bounds].size;
     CGPoint point = CGPointMake(x * screenSize.width, y * screenSize.height);
     
+    TouchController *tc = [TouchController sharedController];
+    
     if ([action isEqualToString:@"down"]) {
         [self.delegate streamServer:self didReceiveTouchDown:point];
     } else if ([action isEqualToString:@"up"]) {
         [self.delegate streamServer:self didReceiveTouchUp:point];
     } else if ([action isEqualToString:@"move"]) {
         [self.delegate streamServer:self didReceiveTouchMove:point];
+    } else if ([action isEqualToString:@"longpress"]) {
+        // 右键 → 长按
+        [tc longPressAtPoint:point];
+    } else if ([action isEqualToString:@"scroll"]) {
+        // 滚轮 → 滑动手势
+        int direction = [msg[@"direction"] intValue];
+        [tc scrollAtPoint:point direction:direction];
     }
 }
 
