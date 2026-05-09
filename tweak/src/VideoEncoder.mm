@@ -56,7 +56,10 @@
     mSPSPPSSent = NO;
     
     // 设置 ForceKeyFrame 属性，让下一个编码帧成为 IDR 关键帧
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ForceKeyFrame, kCFBooleanTrue);
+    // 使用字符串值而非常量符号，兼容旧版 iOS SDK
+    VTSessionSetProperty(mSession,
+                         CFSTR("ForceKeyFrame"),
+                         kCFBooleanTrue);
 }
 
 - (void)startEncoding {

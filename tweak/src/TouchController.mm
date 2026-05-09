@@ -10,6 +10,7 @@
 #import "TouchController.h"
 #import "STHIDEventGenerator.h"
 #import "Logging.h"
+#import <UIKit/UIScreen.h>
 
 // sendEventStream 字典 key 已在 STHIDEventGenerator.h 中定义
 
