@@ -417,6 +417,12 @@ static void diagAppend(NSString *msg) {
                 mLastHeartbeat = [NSDate date];
             } else if ([type isEqualToString:@"pong"]) {
                 mLastHeartbeat = [NSDate date];
+            } else if ([type isEqualToString:@"request_keyframe"]) {
+                // PC 端重连后请求关键帧
+                TVLog(@"收到关键帧请求");
+                if ([self.delegate respondsToSelector:@selector(streamServerDidRequestKeyframe:)]) {
+                    [self.delegate streamServerDidRequestKeyframe:self];
+                }
             }
         }
     }

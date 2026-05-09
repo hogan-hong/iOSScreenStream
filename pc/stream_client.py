@@ -99,6 +99,8 @@ class iOSStreamClient:
             with self.control_lock:
                 self.control_socket = sock
             print(f"[控制] 已连接 {self.ios_ip}:{self.control_port}")
+            # 连接成功后立即请求关键帧，确保视频流从 IDR 帧开始
+            self._request_keyframe()
             return True
         except Exception as e:
             print(f"[控制] 连接失败: {e}")
@@ -132,6 +134,8 @@ class iOSStreamClient:
     def _video_receiver(self):
         """接收 UDP 视频数据"""
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # 设置 SO_REUSEADDR，避免关闭后端口 TIME_WAIT 导致二次启动灰屏
+        self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.udp_socket.bind(('0.0.0.0', self.video_port))
         self.udp_socket.settimeout(1.0)
 
@@ -559,6 +563,19 @@ class iOSStreamClient:
             except Exception:
                 pass
 
+    def _request_keyframe(self):
+        """向 iOS 端请求关键帧（IDR），用于重新连接时获取完整视频帧"""
+        with self.control_lock:
+            sock = self.control_socket
+        if not sock:
+            return
+        try:
+            msg = json.dumps({"type": "request_keyframe"}) + "\n"
+            sock.send(msg.encode())
+            print("[控制] 已请求关键帧")
+        except Exception as e:
+            print(f"[控制] 请求关键帧失败: {e}")
+
     def send_touch(self, action, x, y):
         """发送触控指令（供外部调用）"""
         with self.control_lock:
@@ -576,20 +593,42 @@ class iOSStreamClient:
         print("[信息] 正在停止...")
         self.running = False
 
+        # 关闭 UDP socket
         if self.udp_socket:
             try:
                 self.udp_socket.close()
             except:
                 pass
+            self.udp_socket = None
 
+        # 彻底终止 FFmpeg 进程
         if self.ffmpeg_proc:
             try:
-                self.ffmpeg_proc.stdin.close()
+                if self.ffmpeg_proc.stdin:
+                    self.ffmpeg_proc.stdin.close()
+            except:
+                pass
+            try:
+                if self.ffmpeg_proc.stdout:
+                    self.ffmpeg_proc.stdout.close()
+            except:
+                pass
+            try:
+                if self.ffmpeg_proc.stderr:
+                    self.ffmpeg_proc.stderr.close()
+            except:
+                pass
+            try:
                 self.ffmpeg_proc.terminate()
                 self.ffmpeg_proc.wait(timeout=3)
             except:
-                pass
+                try:
+                    self.ffmpeg_proc.kill()
+                except:
+                    pass
+            self.ffmpeg_proc = None
 
+        # 关闭控制连接
         with self.control_lock:
             if self.control_socket:
                 try:
@@ -597,6 +636,16 @@ class iOSStreamClient:
                 except:
                     pass
                 self.control_socket = None
+
+        # 清理状态，确保重新启动时不会残留旧数据
+        with self.frame_lock:
+            self.frame_buffer = None
+        self.frame_width = 0
+        self.frame_height = 0
+        self.resolution_detected.clear()
+        with self._ffmpeg_queue_lock:
+            self._ffmpeg_queue.clear()
+        self.packet_buffer.clear()
 
         print("[信息] 已停止")
 

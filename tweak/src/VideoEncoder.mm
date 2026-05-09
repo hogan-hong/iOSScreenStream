@@ -48,6 +48,17 @@
 - (int)height { return mHeight; }
 - (BOOL)isEncoding { return mIsEncoding; }
 
+- (void)forceKeyframe {
+    if (!mIsEncoding || !mSession) return;
+    
+    TVLog(@"强制生成关键帧");
+    // 重置 SPS/PPS 发送标记，确保下次关键帧带上 SPS/PPS
+    mSPSPPSSent = NO;
+    
+    // 设置 ForceKeyFrame 属性，让下一个编码帧成为 IDR 关键帧
+    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ForceKeyFrame, kCFBooleanTrue);
+}
+
 - (void)startEncoding {
     if (mIsEncoding) return;
     

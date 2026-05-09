@@ -235,4 +235,9 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
     [[TouchController sharedController] touchMoveToPoint:point];
 }
 
+- (void)streamServerDidRequestKeyframe:(id)server {
+    // PC 端重连后请求关键帧，强制编码器生成 IDR 帧
+    [mEncoder forceKeyframe];
+}
+
 @end
