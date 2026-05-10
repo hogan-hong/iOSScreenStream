@@ -57,10 +57,10 @@
     
     TVLog(@"强制生成关键帧");
     // 重置 SPS/PPS 发送标记，确保下次关键帧带上 SPS/PPS
-    mSPSPPSSent = NO;
-    
-    // 标记下一帧需要强制为关键帧
-    mForceNextKeyframe = YES;
+    @synchronized(self) {
+        mSPSPPSSent = NO;
+        mForceNextKeyframe = YES;
+    }
 }
 
 - (void)startEncoding {
@@ -151,12 +151,14 @@
     
     // 如果需要强制关键帧，通过帧属性传递
     CFDictionaryRef frameProperties = NULL;
-    if (mForceNextKeyframe) {
-        mForceNextKeyframe = NO;
-        const void *keys[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
-        const void *values[] = { kCFBooleanTrue };
-        frameProperties = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        TVLog(@"强制关键帧: 通过帧属性请求");
+    @synchronized(self) {
+        if (mForceNextKeyframe) {
+            mForceNextKeyframe = NO;
+            const void *keys[] = { kVTEncodeFrameOptionKey_ForceKeyFrame };
+            const void *values[] = { kCFBooleanTrue };
+            frameProperties = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            TVLog(@"强制关键帧: 通过帧属性请求");
+        }
     }
     
     VTEncodeInfoFlags infoFlags;
@@ -242,9 +244,9 @@
     }
     
     if (annexBData.length > 0) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.delegate videoEncoder:self didEncodeData:[annexBData copy] isKeyFrame:isKeyFrame];
-        });
+        // 直接在编码回调线程调用 delegate，避免主线程阻塞导致编码器卡死
+        // （CADisplayLink 在主线程驱动，如果主线程被 UDP 发送阻塞，新帧无法提交）
+        [self.delegate videoEncoder:self didEncodeData:[annexBData copy] isKeyFrame:isKeyFrame];
     }
 }
 
