@@ -635,9 +635,9 @@ class iOSStreamClient:
         try:
             msg = json.dumps({"type": "start_stream"}) + "\n"
             sock.send(msg.encode())
-            print("[控制] 已发送"开始流"命令，等待 iOS 端重置编码器并发送 SPS/PPS...")
+            print("[控制] 已发送开始流命令，等待 iOS 端重置编码器并发送 SPS/PPS...")
         except Exception as e:
-            print(f"[控制] 发送"开始流"命令失败: {e}")
+            print(f"[控制] 发送开始流命令失败: {e}")
 
     def send_touch(self, action, x, y):
         """发送触控指令（供外部调用）"""
