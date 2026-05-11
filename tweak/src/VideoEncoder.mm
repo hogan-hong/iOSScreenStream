@@ -13,7 +13,7 @@
     int mBitrate;
     int mFps;
     
-    VTCompressionSessionRef mSession;
+    VTCompressionSessionRef mCompressionSession;
     BOOL mIsEncoding;
     dispatch_queue_t mEncodeQueue;
     
@@ -33,7 +33,7 @@
         mHeight = height;
         mBitrate = bitrate;
         mFps = fps;
-        mSession = NULL;
+        mCompressionSession = NULL;
         mIsEncoding = NO;
         mEncodeQueue = dispatch_queue_create("com.iosscreenstream.encoder", DISPATCH_QUEUE_SERIAL);
         mSPS = nil;
@@ -52,8 +52,23 @@
 - (int)height { return mHeight; }
 - (BOOL)isEncoding { return mIsEncoding; }
 
+- (void)reset {
+    // 重置编码器状态，确保重新发送 SPS/PPS
+    TVLog(@"重置编码器");
+    
+    @synchronized(self) {
+        // 重置 SPS/PPS 发送标记
+        mSPSPPSSent = NO;
+        
+        // 强制下一次编码是关键帧
+        mForceNextKeyframe = YES;
+        
+        TVLog(@"编码器已重置，下次编码将发送新的 SPS/PPS");
+    }
+}
+
 - (void)forceKeyframe {
-    if (!mIsEncoding || !mSession) return;
+    if (!mIsEncoding || !mCompressionSession) return;
     
     TVLog(@"强制生成关键帧");
     // 重置 SPS/PPS 发送标记，确保下次关键帧带上 SPS/PPS
@@ -78,7 +93,7 @@
         NULL,
         didEncodeCallback,
         (__bridge void *)self,
-        &mSession
+        &mCompressionSession
     );
     
     if (status != noErr) {
@@ -87,19 +102,19 @@
     }
     
     // 低延迟配置
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
     
     // 码率
     CFNumberRef bitrateNum = (__bridge CFNumberRef)@(mBitrate);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_AverageBitRate, bitrateNum);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_AverageBitRate, bitrateNum);
     
     // 帧率
     CFNumberRef fpsNum = (__bridge CFNumberRef)@(mFps);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ExpectedFrameRate, fpsNum);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_ExpectedFrameRate, fpsNum);
     
     // 编码档位
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_Main_AutoLevel);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_Main_AutoLevel);
     
     // 码率限制
     int64_t dataRateLimitBytesPerSec = mBitrate / 8;
@@ -107,14 +122,14 @@
     dataRateLimits[0] = (__bridge CFNumberRef)[NSNumber numberWithLongLong:dataRateLimitBytesPerSec * 2];
     dataRateLimits[1] = (__bridge CFNumberRef)[NSNumber numberWithLongLong:dataRateLimitBytesPerSec];
     CFArrayRef dataRateLimitsArray = CFArrayCreate(NULL, (const void **)dataRateLimits, 2, &kCFTypeArrayCallBacks);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_DataRateLimits, dataRateLimitsArray);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_DataRateLimits, dataRateLimitsArray);
     CFRelease(dataRateLimitsArray);
     
     // 关键帧间隔（约2秒一个关键帧）
     CFNumberRef maxKeyFrameInterval = (__bridge CFNumberRef)@(mFps * 2);
-    VTSessionSetProperty(mSession, kVTCompressionPropertyKey_MaxKeyFrameInterval, maxKeyFrameInterval);
+    VTSessionSetProperty(mCompressionSession, kVTCompressionPropertyKey_MaxKeyFrameInterval, maxKeyFrameInterval);
     
-    status = VTCompressionSessionPrepareToEncodeFrames(mSession);
+    status = VTCompressionSessionPrepareToEncodeFrames(mCompressionSession);
     if (status != noErr) {
         TVLog(@"编码准备失败: %d", status);
         return;
@@ -129,9 +144,9 @@
 - (void)stopEncoding {
     if (!mIsEncoding) return;
     
-    VTCompressionSessionCompleteFrames(mSession, kCMTimeInvalid);
-    CFRelease(mSession);
-    mSession = NULL;
+    VTCompressionSessionCompleteFrames(mCompressionSession, kCMTimeInvalid);
+    CFRelease(mCompressionSession);
+    mCompressionSession = NULL;
     mIsEncoding = NO;
     mSPS = nil;
     mPPS = nil;
@@ -163,7 +178,7 @@
     
     VTEncodeInfoFlags infoFlags;
     OSStatus status = VTCompressionSessionEncodeFrame(
-        mSession,
+        mCompressionSession,
         pixelBuffer,
         presentationTime,
         kCMTimeInvalid,

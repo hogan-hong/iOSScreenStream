@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)startEncoding;
 - (void)stopEncoding;
 - (void)encodeSampleBuffer:(CMSampleBufferRef)sampleBuffer;
+- (void)reset;
 - (void)forceKeyframe;
 
 @end

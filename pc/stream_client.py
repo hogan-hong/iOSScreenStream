@@ -104,7 +104,11 @@ class iOSStreamClient:
             with self.control_lock:
                 self.control_socket = sock
             print(f"[控制] 已连接 {self.ios_ip}:{self.control_port}")
-            # 连接成功后立即请求关键帧，确保视频流从 IDR 帧开始
+            
+            # 连接成功后发送"开始流"命令，触发 iOS 端重置编码器并发送新的 SPS/PPS
+            self._start_stream()
+            
+            # 然后请求关键帧，确保视频流从 IDR 帧开始
             self._request_keyframe()
             return True
         except Exception as e:
@@ -621,6 +625,19 @@ class iOSStreamClient:
         except Exception as e:
             if self._keyframe_request_count <= 3:
                 print(f"[控制] 请求关键帧失败: {e}")
+
+    def _start_stream(self):
+        """向 iOS 端发送"开始流"命令，触发重置编码器并发送新的 SPS/PPS"""
+        with self.control_lock:
+            sock = self.control_socket
+        if not sock:
+            return
+        try:
+            msg = json.dumps({"type": "start_stream"}) + "\n"
+            sock.send(msg.encode())
+            print("[控制] 已发送"开始流"命令，等待 iOS 端重置编码器并发送 SPS/PPS...")
+        except Exception as e:
+            print(f"[控制] 发送"开始流"命令失败: {e}")
 
     def send_touch(self, action, x, y):
         """发送触控指令（供外部调用）"""

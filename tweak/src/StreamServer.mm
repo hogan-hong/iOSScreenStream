@@ -417,6 +417,12 @@ static void diagAppend(NSString *msg) {
                 mLastHeartbeat = [NSDate date];
             } else if ([type isEqualToString:@"pong"]) {
                 mLastHeartbeat = [NSDate date];
+            } else if ([type isEqualToString:@"start_stream"]) {
+                // PC 端请求开始流，重置编码器并发送新的 SPS/PPS
+                TVLog(@"收到开始流命令，重置编码器");
+                if ([self.delegate respondsToSelector:@selector(streamServerDidRequestStartStream:)]) {
+                    [self.delegate streamServerDidRequestStartStream:self];
+                }
             } else if ([type isEqualToString:@"request_keyframe"]) {
                 // PC 端重连后请求关键帧
                 TVLog(@"收到关键帧请求");

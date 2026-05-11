@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)streamServerClientDidConnect:(id)server;
 - (void)streamServerClientDidDisconnect:(id)server;
 - (void)streamServerDidRequestKeyframe:(id)server;
+- (void)streamServerDidRequestStartStream:(id)server;
 @end
 
 @interface StreamServer : NSObject

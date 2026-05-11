@@ -234,9 +234,20 @@ static void settingsChangedCallback(CFNotificationCenterRef center, void *observ
 - (void)streamServer:(id)server didReceiveTouchMove:(CGPoint)point {
     [[TouchController sharedController] touchMoveToPoint:point];
 }
-
 - (void)streamServerDidRequestKeyframe:(id)server {
     // PC 端重连后请求关键帧，强制编码器生成 IDR 帧
+    TVLog(@"收到关键帧请求");
+    [mEncoder forceKeyframe];
+}
+
+- (void)streamServerDidRequestStartStream:(id)server {
+    // PC 端请求开始流，重置编码器并发送新的 SPS/PPS
+    TVLog(@"收到开始流请求，重置编码器并强制发送关键帧");
+    
+    // 重置编码器，确保下一次编码是完整的关键帧（包含 SPS/PPS）
+    [mEncoder reset];
+    
+    // 立即强制发送关键帧
     [mEncoder forceKeyframe];
 }
 
