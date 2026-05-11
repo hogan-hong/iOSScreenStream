@@ -14,3 +14,7 @@
 // gShouldApplyOrientationFix — iPad orientation fix flag
 // Default NO (we handle orientation ourselves)
 BOOL gShouldApplyOrientationFix __attribute__((weak)) = NO;
+
+// gOrientationFixQuad — orientation fix quadrant
+// Default 0 (no rotation)
+int gOrientationFixQuad __attribute__((weak)) = 0;
