@@ -54,13 +54,21 @@
     _fingerDown = YES;
     _lastDownPoint = point;
     TVLog(@"[TC] touchDown: (%.1f, %.1f)", point.x, point.y);
-    [[STHIDEventGenerator sharedGenerator] touchDown:point];
+    
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] touchDown:point];
+    });
 }
 
 - (void)touchUpAtPoint:(CGPoint)point {
     _fingerDown = NO;
     TVLog(@"[TC] touchUp: (%.1f, %.1f)", point.x, point.y);
-    [[STHIDEventGenerator sharedGenerator] liftUp:point];
+    
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] liftUp:point];
+    });
 }
 
 - (void)touchMoveToPoint:(CGPoint)point {
@@ -124,25 +132,38 @@
         ]
     };
     
-    [[STHIDEventGenerator sharedGenerator] sendEventStream:eventInfo];
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] sendEventStream:eventInfo];
+    });
     
     _lastDownPoint = point;
 }
 
 - (void)tapAtPoint:(CGPoint)point {
     TVLog(@"[TC] tap: (%.1f, %.1f)", point.x, point.y);
-    [[STHIDEventGenerator sharedGenerator] tap:point];
+    
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] tap:point];
+    });
 }
 
 #pragma mark - 长按（右键映射）
 
 - (void)longPressAtPoint:(CGPoint)point {
     TVLog(@"[TC] longPress: (%.1f, %.1f)", point.x, point.y);
+    
     // 长按：按下 → 等待 0.8 秒 → 抬起
     // 0.5 秒太短，iOS 长按检测阈值通常是 0.5-0.8 秒
-    [[STHIDEventGenerator sharedGenerator] touchDown:point];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [[STHIDEventGenerator sharedGenerator] liftUp:point];
+    
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] touchDown:point];
+        
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[STHIDEventGenerator sharedGenerator] liftUp:point];
+        });
     });
 }
 
@@ -230,7 +251,10 @@
         ]
     };
     
-    [[STHIDEventGenerator sharedGenerator] sendEventStream:eventInfo];
+    // 确保在主线程执行 UI 操作
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[STHIDEventGenerator sharedGenerator] sendEventStream:eventInfo];
+    });
 }
 
 @end
