@@ -55,7 +55,13 @@ class VNCClient:
     def _handshake(self):
         """VNC 握手 - Protocol Version"""
         # 接收服务器版本
-        server_version = self.socket.recv(12).decode()
+        data = b''
+        while len(data) < 12:
+            chunk = self.socket.recv(12 - len(data))
+            if not chunk:
+                raise Exception("VNC 握手失败: 连接关闭")
+            data += chunk
+        server_version = data.decode()
         print(f"[VNC] 服务器版本: {server_version}")
         
         # 发送客户端版本
@@ -63,9 +69,15 @@ class VNCClient:
         self.socket.send(client_version)
         
         # 接收安全类型
-        security_types = self.socket.recv(2)
-        num_types = security_types[0]
-        types = security_types[1:1+num_types]
+        sec_types_data = b''
+        while len(sec_types_data) < 2:
+            chunk = self.socket.recv(2 - len(sec_types_data))
+            if not chunk:
+                raise Exception("VNC 握手失败: 连接关闭")
+            sec_types_data += chunk
+        
+        num_types = sec_types_data[0]
+        types = sec_types_data[1:1+num_types]
         print(f"[VNC] 支持的安全类型: {list(types)}")
         
         # 发送选择的安全类型（选择 1 = None）
@@ -93,16 +105,48 @@ class VNCClient:
         client_init = shared_flag + b'\x00\x00\x00'
         self.socket.send(client_init)
         
-        # 接收 ServerInit
-        framebuffer_width = struct.unpack('>H', self.socket.recv(2))[0]
-        framebuffer_height = struct.unpack('>H', self.socket.recv(2))[0]
+        # 接收 ServerInit - framebuffer width
+        fb_width_data = b''
+        while len(fb_width_data) < 2:
+            chunk = self.socket.recv(2 - len(fb_width_data))
+            if not chunk:
+                raise Exception("VNC 初始化失败: 连接关闭")
+            fb_width_data += chunk
+        framebuffer_width = struct.unpack('>H', fb_width_data)[0]
+        
+        # 接收 framebuffer height
+        fb_height_data = b''
+        while len(fb_height_data) < 2:
+            chunk = self.socket.recv(2 - len(fb_height_data))
+            if not chunk:
+                raise Exception("VNC 初始化失败: 连接关闭")
+            fb_height_data += chunk
+        framebuffer_height = struct.unpack('>H', fb_height_data)[0]
         
         # 读取像素格式（16字节）
-        self.socket.recv(16)
+        pixel_format_data = b''
+        while len(pixel_format_data) < 16:
+            chunk = self.socket.recv(16 - len(pixel_format_data))
+            if not chunk:
+                raise Exception("VNC 初始化失败: 连接关闭")
+            pixel_format_data += chunk
         
         # 读取服务器名称（前4字节是长度）
-        name_length = struct.unpack('>I', self.socket.recv(4))[0]
-        server_name = self.socket.recv(name_length).decode()
+        name_length_data = b''
+        while len(name_length_data) < 4:
+            chunk = self.socket.recv(4 - len(name_length_data))
+            if not chunk:
+                raise Exception("VNC 初始化失败: 连接关闭")
+            name_length_data += chunk
+        
+        name_length = struct.unpack('>I', name_length_data)[0]
+        server_name_data = b''
+        while len(server_name_data) < name_length:
+            chunk = self.socket.recv(name_length - len(server_name_data))
+            if not chunk:
+                raise Exception("VNC 初始化失败: 连接关闭")
+            server_name_data += chunk
+        server_name = server_name_data.decode()
         
         self.width = framebuffer_width
         self.height = framebuffer_height
