@@ -797,8 +797,9 @@ class iOSStreamClient:
 
     def send_touch(self, action, x, y):
         """发送触控指令（通过 TrollVNC）"""
-        if not self.enable_vnc_control or not self.vnc_client:
-            print("[触控] VNC 控制未启用")
+        if not self.enable_vnc_control or not self.vnc_client or not self.vnc_client.connected:
+            if self.enable_vnc_control:
+                print(f"[触控] VNC 未连接，触控不可用")
             return
         
         # VNC button_mask: 0=松开, 1=左键按下, 2=中键, 4=右键
