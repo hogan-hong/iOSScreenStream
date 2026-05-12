@@ -115,68 +115,69 @@ class VNCClient:
     
     def _initialize(self):
         """VNC 初始化"""
-        # 发送共享标志和客户端初始化消息
-        # shared=1 (True), 保留字节
-        shared_flag = struct.pack('>B', 1)
+        # 发送 ClientInit 消息
+        # ClientInit: shared flag (1 byte) + padding (3 bytes)
+        # 尝试使用 shared=0 (不共享)，有些服务器更倾向于这个
+        try:
+            # 方法 1：shared=1（共享）
+            self.socket.send(struct.pack('>Bxxx', 1))
+            print(f"[VNC] 发送 ClientInit (shared=1)")
+        except:
+            pass
         
-        # ClientInit: shared flag + padding[3]
-        client_init = shared_flag + b'\x00\x00\x00'
-        self.socket.send(client_init)
-        
-        # 接收 ServerInit - framebuffer width (2 bytes)
-        fb_width_data = b''
-        while len(fb_width_data) < 2:
-            chunk = self.socket.recv(2 - len(fb_width_data))
+        # 接收 ServerInit
+        try:
+            # framebuffer width (2 bytes)
+            fb_width_data = self._recv_exact(2)
+            framebuffer_width = struct.unpack('>H', fb_width_data)[0]
+            print(f"[VNC] Framebuffer width: {framebuffer_width}")
+            
+            # framebuffer height (2 bytes)
+            fb_height_data = self._recv_exact(2)
+            framebuffer_height = struct.unpack('>H', fb_height_data)[0]
+            print(f"[VNC] Framebuffer height: {framebuffer_height}")
+            
+            # 像素格式（16字节）
+            pixel_format_data = self._recv_exact(16)
+            print(f"[VNC] 收到像素格式")
+            
+            # 服务器名称长度（4字节）
+            name_length_data = self._recv_exact(4)
+            name_length = struct.unpack('>I', name_length_data)[0]
+            print(f"[VNC] 服务器名称长度: {name_length}")
+            
+            # 服务器名称
+            if name_length > 0:
+                server_name_data = self._recv_exact(name_length)
+                server_name = server_name_data.decode()
+            else:
+                server_name = ""
+            
+            self.width = framebuffer_width
+            self.height = framebuffer_height
+            print(f"[VNC] 屏幕分辨率: {self.width}x{self.height}")
+            print(f"[VNC] 服务器名称: {server_name}")
+            
+            # 设置像素格式
+            self._set_pixel_format()
+            # 设置编码
+            self._set_encodings()
+            # 请求 FramebufferUpdate
+            self._request_framebuffer_update()
+            
+        except Exception as e:
+            print(f"[VNC] 接收 ServerInit 失败: {e}")
+            raise
+    
+    def _recv_exact(self, n):
+        """精确接收 n 字节数据"""
+        data = b''
+        while len(data) < n:
+            chunk = self.socket.recv(n - len(data))
             if not chunk:
-                raise Exception("VNC 初始化失败: 连接关闭")
-            fb_width_data += chunk
-        framebuffer_width = struct.unpack('>H', fb_width_data)[0]
-        
-        # 接收 framebuffer height (2 bytes)
-        fb_height_data = b''
-        while len(fb_height_data) < 2:
-            chunk = self.socket.recv(2 - len(fb_height_data))
-            if not chunk:
-                raise Exception("VNC 初始化失败: 连接关闭")
-            fb_height_data += chunk
-        framebuffer_height = struct.unpack('>H', fb_height_data)[0]
-        
-        # 读取像素格式（16字节）
-        pixel_format_data = b''
-        while len(pixel_format_data) < 16:
-            chunk = self.socket.recv(16 - len(pixel_format_data))
-            if not chunk:
-                raise Exception("VNC 初始化失败: 连接关闭")
-            pixel_format_data += chunk
-        
-        # 读取服务器名称（前4字节是长度）
-        name_length_data = b''
-        while len(name_length_data) < 4:
-            chunk = self.socket.recv(4 - len(name_length_data))
-            if not chunk:
-                raise Exception("VNC 初始化失败: 连接关闭")
-            name_length_data += chunk
-        
-        name_length = struct.unpack('>I', name_length_data)[0]
-        server_name_data = b''
-        while len(server_name_data) < name_length:
-            chunk = self.socket.recv(name_length - len(server_name_data))
-            if not chunk:
-                raise Exception("VNC 初始化失败: 连接关闭")
-            server_name_data += chunk
-        server_name = server_name_data.decode()
-        
-        self.width = framebuffer_width
-        self.height = framebuffer_height
-        print(f"[VNC] 屏幕分辨率: {self.width}x{self.height}")
-        print(f"[VNC] 服务器名称: {server_name}")
-        
-        # 设置像素格式（有些服务器需要客户端明确设置）
-        self._set_pixel_format()
-        # 设置编码（只使用 Raw 编码，因为不需要接收视频）
-        self._set_encodings()
-        # 请求 FramebufferUpdate（即使不需要接收，也需要发送以完成握手）
-        self._request_framebuffer_update()
+                raise Exception(f"连接关闭: 需要接收 {n} 字节，只收到 {len(data)} 字节")
+            data += chunk
+        return data
     
     def _request_framebuffer_update(self):
         """请求 Framebuffer Update（完成握手）"""
