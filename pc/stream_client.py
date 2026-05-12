@@ -711,18 +711,25 @@ class iOSStreamClient:
         cv2.destroyAllWindows()
 
     def _on_mouse(self, event, x, y, flags, param):
-        """鼠标事件 → 触控指令
+        """鼠标事件 → 触控指令（通过 TrollVNC 或 iOS 端）
 
         坐标映射：
         - WINDOW_NORMAL 模式下，OpenCV 会在窗口内保持视频比例，可能有黑边
         - getWindowImageRect 返回的是窗口整体尺寸（含黑边），不是画面区域
         - 所以需要根据 frame 和窗口的比例来正确映射坐标
         """
-        with self.control_lock:
-            sock = self.control_socket
-        if not sock:
+        
+        # 如果启用了 VNC 控制且已连接，通过 VNC 发送触控事件
+        if self.enable_vnc_control and self.vnc_client and self.vnc_client.connected:
+            self._send_vnc_touch(event, x, y, flags, param)
             return
-
+        
+        # 否则，不发送任何触控事件（避免触发 iOS 端的 TouchController 导致崩溃）
+        # 如果需要回退到 iOS 端触控控制，需要先修复 TouchController
+        return
+    
+    def _send_vnc_touch(self, event, x, y, flags, param):
+        """通过 VNC 发送触控事件"""
         with self.frame_lock:
             if self.frame_buffer is not None:
                 frame_h, frame_w = self.frame_buffer.shape[:2]
@@ -759,28 +766,20 @@ class iOSStreamClient:
         if img_x < 0 or img_x > display_w or img_y < 0 or img_y > display_h:
             return
 
-        msg = None
-        if event == cv2.EVENT_LBUTTONDOWN:
-            msg = {"type": "touch", "action": "down", "x": nx, "y": ny}
-        elif event == cv2.EVENT_LBUTTONUP:
-            msg = {"type": "touch", "action": "up", "x": nx, "y": ny}
-        elif event == cv2.EVENT_MOUSEMOVE and flags & cv2.EVENT_FLAG_LBUTTON:
-            msg = {"type": "touch", "action": "move", "x": nx, "y": ny}
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            # 右键 → 长按（iOS 辅助功能风格）
-            msg = {"type": "touch", "action": "longpress", "x": nx, "y": ny}
-        elif event == cv2.EVENT_MOUSEWHEEL:
-            # 滚轮 → 滑动手势
-            # flags 包含滚轮方向：cv2.EVENT_FLAG_SHIFTKEY 等不相关
-            # 正向滚动(>0) = 向上滑, 负向(<0) = 向下滑
-            direction = 1 if flags > 0 else -1
-            msg = {"type": "touch", "action": "scroll", "x": nx, "y": ny, "direction": direction}
+        # 映射到 VNC 坐标系（基于 TrollVNC 报告的屏幕分辨率）
+        vnc_x = int(nx * self.vnc_client.width)
+        vnc_y = int(ny * self.vnc_client.height)
 
-        if msg:
-            try:
-                sock.send((json.dumps(msg) + '\n').encode())
-            except Exception:
-                pass
+        # 发送 VNC PointerEvent
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.vnc_client.send_pointer_event(vnc_x, vnc_y, 1)  # 按下
+            print(f"[触控] VNC down at ({vnc_x}, {vnc_y})")
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.vnc_client.send_pointer_event(vnc_x, vnc_y, 0)  # 抬起
+            print(f"[触控] VNC up at ({vnc_x}, {vnc_y})")
+        elif event == cv2.EVENT_MOUSEMOVE and flags & cv2.EVENT_FLAG_LBUTTON:
+            self.vnc_client.send_pointer_event(vnc_x, vnc_y, 0)  # 移动
+        # 其他事件（右键、滚轮）暂时不支持 VNC
 
     def _request_keyframe(self):
         """向 iOS 端请求关键帧（IDR），用于重新连接时获取完整视频帧"""
