@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 iOSScreenStream PC 客户端
-接收 iOS 设备 H.264 视频流（UDP），发送触控指令（TCP）
+接收 iOS 设备 H.264 视频流（UDP），通过 TrollVNC 发送触控指令（VNC 协议）
 """
 
 import argparse
@@ -20,13 +20,135 @@ PACKET_HEADER_SIZE = 14  # 2(seq) + 2(totalParts) + 2(partIndex) + 4(totalLen) +
 UDP_MAX_PACKET_SIZE = 1400
 
 
+class VNCClient:
+    """VNC 客户端 - 通过 VNC 协议与 TrollVNC 通信发送触控事件"""
+    
+    def __init__(self, host, port=5900):
+        self.host = host
+        self.port = port
+        self.socket = None
+        self.connected = False
+        self.width = 1920
+        self.height = 1080
+        self.version = 3.8
+        
+    def connect(self):
+        """连接到 VNC 服务器"""
+        try:
+            print(f"[VNC] 连接到 {self.host}:{self.port}...")
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(5)
+            self.socket.connect((self.host, self.port))
+            
+            # VNC 协议握手
+            self._handshake()
+            self._authenticate()
+            self._initialize()
+            
+            self.connected = True
+            print(f"[VNC] 连接成功！")
+            return True
+        except Exception as e:
+            print(f"[VNC] 连接失败: {e}")
+            return False
+    
+    def _handshake(self):
+        """VNC 握手 - Protocol Version"""
+        # 接收服务器版本
+        server_version = self.socket.recv(12).decode()
+        print(f"[VNC] 服务器版本: {server_version}")
+        
+        # 发送客户端版本
+        client_version = f"RFB {self.version:03.6f}\n".encode()
+        self.socket.send(client_version)
+        
+        # 接收安全类型
+        security_types = self.socket.recv(2)
+        num_types = security_types[0]
+        types = security_types[1:1+num_types]
+        print(f"[VNC] 支持的安全类型: {list(types)}")
+        
+        # 发送选择的安全类型（选择 1 = None）
+        if 1 in types:
+            self.socket.send(bytes([1]))
+        elif 0 in types:  # Invalid
+            self.socket.send(bytes([0]))
+            reason = self.socket.recv(8)
+            raise Exception(f"VNC 握手失败: {reason}")
+        else:
+            raise Exception(f"不支持的安全类型: {types}")
+    
+    def _authenticate(self):
+        """VNC 认证"""
+        # 安全类型 1 (None) 无需认证
+        pass
+    
+    def _initialize(self):
+        """VNC 初始化"""
+        # 发送共享标志和客户端初始化消息
+        # shared=1 (True), 保留字节
+        shared_flag = struct.pack('>B', 1)
+        
+        # ClientInit: shared flag + padding[3]
+        client_init = shared_flag + b'\x00\x00\x00'
+        self.socket.send(client_init)
+        
+        # 接收 ServerInit
+        framebuffer_width = struct.unpack('>H', self.socket.recv(2))[0]
+        framebuffer_height = struct.unpack('>H', self.socket.recv(2))[0]
+        
+        # 读取像素格式（16字节）
+        self.socket.recv(16)
+        
+        # 读取服务器名称（前4字节是长度）
+        name_length = struct.unpack('>I', self.socket.recv(4))[0]
+        server_name = self.socket.recv(name_length).decode()
+        
+        self.width = framebuffer_width
+        self.height = framebuffer_height
+        print(f"[VNC] 屏幕分辨率: {self.width}x{self.height}")
+        print(f"[VNC] 服务器名称: {server_name}")
+    
+    def send_pointer_event(self, x, y, button_mask):
+        """发送 VNC PointerEvent（触控事件）"""
+        if not self.connected or not self.socket:
+            return False
+        
+        try:
+            # VNC PointerEvent: 1 byte (button_mask) + 2 bytes (x) + 2 bytes (y)
+            # button_mask: 1=左键按下, 2=中键, 4=右键, 8=向上滚轮, 16=向下滚轮
+            message = struct.pack('>BHH', button_mask, int(x), int(y))
+            self.socket.send(message)
+            return True
+        except Exception as e:
+            print(f"[VNC] 发送触控事件失败: {e}")
+            self.connected = False
+            return False
+    
+    def disconnect(self):
+        """断开连接"""
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+        self.connected = False
+
+
 class iOSStreamClient:
-    def __init__(self, ios_ip="192.168.1.101", video_port=5001, control_port=5002, device_name="iPhone"):
+    def __init__(self, ios_ip="192.168.1.101", video_port=5001, control_port=5002, 
+                 device_name="iPhone", vnc_port=5900, enable_vnc_control=True):
         self.ios_ip = ios_ip
         self.video_port = video_port
         self.control_port = control_port
         self.device_name = device_name
         self.running = True
+
+        # VNC 客户端（用于触控控制）
+        self.enable_vnc_control = enable_vnc_control
+        self.vnc_port = vnc_port
+        self.vnc_client = VNCClient(ios_ip, vnc_port) if enable_vnc_control else None
 
         # 视频
         self.udp_socket = None
@@ -63,6 +185,13 @@ class iOSStreamClient:
         """启动客户端"""
         print(f"[信息] 连接 iOS 设备: {self.ios_ip}")
         print(f"[信息] 视频端口(UDP): {self.video_port}, 控制端口(TCP): {self.control_port}")
+        
+        # 连接 VNC 服务器（用于触控控制）
+        if self.enable_vnc_control and self.vnc_client:
+            if self.vnc_client.connect():
+                print(f"[信息] TrollVNC 触控控制已启用")
+            else:
+                print(f"[警告] TrollVNC 连接失败，触控控制不可用")
 
         # 先连接 TCP 控制通道（PC 主动连 iOS 端监听的端口）
         if not self._connect_control():
@@ -623,21 +752,31 @@ class iOSStreamClient:
                 print(f"[控制] 请求关键帧失败: {e}")
 
     def send_touch(self, action, x, y):
-        """发送触控指令（供外部调用）"""
-        with self.control_lock:
-            sock = self.control_socket
-        if not sock:
+        """发送触控指令（通过 TrollVNC）"""
+        if not self.enable_vnc_control or not self.vnc_client:
+            print("[触控] VNC 控制未启用")
             return
-        msg = {"type": "touch", "action": action, "x": x, "y": y}
-        try:
-            sock.send((json.dumps(msg) + '\n').encode())
-        except Exception:
-            pass
+        
+        # VNC button_mask: 0=松开, 1=左键按下, 2=中键, 4=右键
+        button_mask = 0
+        if action == "down":
+            button_mask = 1  # 左键按下
+        # "up" 和 "move" 都是 button_mask=0
+        
+        success = self.vnc_client.send_pointer_event(x, y, button_mask)
+        if success:
+            print(f"[触控] VNC 事件: {action} at ({x}, {y})")
+        else:
+            print(f"[触控] VNC 发送失败: {action} at ({x}, {y})")
 
     def stop(self):
         """停止客户端"""
         print("[信息] 正在停止...")
         self.running = False
+
+        # 关闭 VNC 连接
+        if self.vnc_client:
+            self.vnc_client.disconnect()
 
         # 关闭 UDP socket
         if self.udp_socket:
@@ -706,14 +845,25 @@ def main():
                        help='控制 TCP 端口 (默认: 5002)')
     parser.add_argument('--device-name', type=str, default='iPhone',
                        help='设备显示名称')
+    parser.add_argument('--vnc-port', type=int, default=5900,
+                       help='TrollVNC 端口 (默认: 5900)')
+    parser.add_argument('--enable-vnc-control', action='store_true', default=True,
+                       help='启用 TrollVNC 触控控制 (默认: True)')
+    parser.add_argument('--disable-vnc-control', action='store_true',
+                       help='禁用 TrollVNC 触控控制')
 
     args = parser.parse_args()
+
+    # 处理 VNC 控制参数
+    enable_vnc = args.enable_vnc_control and not args.disable_vnc_control
 
     client = iOSStreamClient(
         ios_ip=args.ios_ip,
         video_port=args.video_port,
         control_port=args.control_port,
-        device_name=args.device_name
+        device_name=args.device_name,
+        vnc_port=args.vnc_port,
+        enable_vnc_control=enable_vnc
     )
 
     try:
