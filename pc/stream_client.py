@@ -15,9 +15,86 @@ import time
 import numpy as np
 import cv2
 
+# 尝试导入 vncdotool（如果安装了）
+try:
+    from vncdotool import api
+    VNC_AVAILABLE = True
+except ImportError:
+    VNC_AVAILABLE = False
+
 # UDP 分包协议常量（与 iOS 端一致）
 PACKET_HEADER_SIZE = 14  # 2(seq) + 2(totalParts) + 2(partIndex) + 4(totalLen) + 4(offset)
 UDP_MAX_PACKET_SIZE = 1400
+
+
+class VNCClientVNCDoTool:
+    """VNC 客户端 - 使用 vncdotool 库发送触控事件"""
+    
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.client = None
+        self.connected = False
+        self.width = 1920
+        self.height = 1080
+        
+    def connect(self):
+        """连接到 VNC 服务器"""
+        if not VNC_AVAILABLE:
+            print(f"[VNC] vncdotool 库未安装，请运行: pip install vncdotool")
+            return False
+        
+        try:
+            print(f"[VNC] 使用 vncdotool 连接到 {self.host}:{self.port}...")
+            self.client = api.connect(f"{self.host}:{self.port}")
+            self.connected = True
+            
+            # 获取屏幕尺寸
+            screen = self.client.screen
+            self.width = screen.width
+            self.height = screen.height
+            
+            print(f"[VNC] 连接成功！分辨率: {self.width}x{self.height}")
+            return True
+        except Exception as e:
+            print(f"[VNC] 连接失败: {e}")
+            import traceback
+            traceback.print_exc()
+            self.connected = False
+            return False
+    
+    def send_pointer_event(self, x, y, button_mask):
+        """发送触控事件"""
+        if not self.connected or not self.client:
+            return False
+        
+        try:
+            # button_mask: 0=松开, 1=按下
+            if button_mask == 1:
+                # 鼠标按下
+                self.client.mouseMove(x, y)
+                self.client.mousePress(button=1)  # 左键
+                # print(f"[VNC] 鼠标按下 at ({x}, {y})")
+            else:
+                # 鼠标抬起或移动
+                self.client.mouseMove(x, y)
+                self.client.mouseRelease(button=1)  # 左键
+                # print(f"[VNC] 鼠标抬起 at ({x}, {y})")
+            return True
+        except Exception as e:
+            print(f"[VNC] 发送触控事件失败: {e}")
+            self.connected = False
+            return False
+    
+    def disconnect(self):
+        """断开连接"""
+        if self.client:
+            try:
+                self.client.disconnect()
+            except:
+                pass
+            self.client = None
+        self.connected = False
 
 
 class VNCClient:
@@ -270,7 +347,19 @@ class iOSStreamClient:
         # VNC 客户端（用于触控控制）
         self.enable_vnc_control = enable_vnc_control
         self.vnc_port = vnc_port
-        self.vnc_client = VNCClient(ios_ip, vnc_port) if enable_vnc_control else None
+        
+        # 优先使用 vncdotool 库（更稳定），如果不可用则使用自定义实现
+        if enable_vnc_control:
+            if VNC_AVAILABLE:
+                self.vnc_client = VNCClientVNCDoTool(ios_ip, vnc_port)
+                self.vnc_implementation = "vncdotool"
+            else:
+                print("[VNC] vncdotool 未安装，使用自定义 VNC 实现")
+                self.vnc_client = VNCClient(ios_ip, vnc_port)
+                self.vnc_implementation = "custom"
+        else:
+            self.vnc_client = None
+            self.vnc_implementation = None
 
         # 视频
         self.udp_socket = None
