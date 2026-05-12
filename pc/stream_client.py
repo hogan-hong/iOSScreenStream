@@ -39,17 +39,28 @@ class VNCClient:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # 移除超时，因为 ServerInit 可能需要较长时间
             self.socket.connect((self.host, self.port))
+            print(f"[VNC] TCP 连接已建立")
             
             # VNC 协议握手
+            print(f"[VNC] 开始协议握手...")
             self._handshake()
+            print(f"[VNC] 握手完成")
+            
+            print(f"[VNC] 开始认证...")
             self._authenticate()
+            print(f"[VNC] 认证完成")
+            
+            print(f"[VNC] 开始初始化...")
             self._initialize()
+            print(f"[VNC] 初始化完成")
             
             self.connected = True
             print(f"[VNC] 连接成功！")
             return True
         except Exception as e:
             print(f"[VNC] 连接失败: {e}")
+            import traceback
+            traceback.print_exc()
             if self.socket:
                 try:
                     self.socket.close()
@@ -112,7 +123,7 @@ class VNCClient:
         client_init = shared_flag + b'\x00\x00\x00'
         self.socket.send(client_init)
         
-        # 接收 ServerInit - framebuffer width
+        # 接收 ServerInit - framebuffer width (2 bytes)
         fb_width_data = b''
         while len(fb_width_data) < 2:
             chunk = self.socket.recv(2 - len(fb_width_data))
@@ -121,7 +132,7 @@ class VNCClient:
             fb_width_data += chunk
         framebuffer_width = struct.unpack('>H', fb_width_data)[0]
         
-        # 接收 framebuffer height
+        # 接收 framebuffer height (2 bytes)
         fb_height_data = b''
         while len(fb_height_data) < 2:
             chunk = self.socket.recv(2 - len(fb_height_data))
@@ -159,6 +170,65 @@ class VNCClient:
         self.height = framebuffer_height
         print(f"[VNC] 屏幕分辨率: {self.width}x{self.height}")
         print(f"[VNC] 服务器名称: {server_name}")
+        
+        # 设置像素格式（有些服务器需要客户端明确设置）
+        self._set_pixel_format()
+        # 设置编码（只使用 Raw 编码，因为不需要接收视频）
+        self._set_encodings()
+        # 请求 FramebufferUpdate（即使不需要接收，也需要发送以完成握手）
+        self._request_framebuffer_update()
+    
+    def _request_framebuffer_update(self):
+        """请求 Framebuffer Update（完成握手）"""
+        try:
+            # FramebufferUpdateRequest message: 1 byte (type) + 1 byte (incremental) + 2 bytes (x) + 2 bytes (y) + 2 bytes (width) + 2 bytes (height)
+            # type=3 (FramebufferUpdateRequest), incremental=0 (不增量更新)
+            message = struct.pack('>BBHHHH', 3, 0, 0, 0, self.width, self.height)
+            self.socket.send(message)
+            print(f"[VNC] 已请求 FramebufferUpdate")
+        except Exception as e:
+            print(f"[VNC] 请求 FramebufferUpdate 失败: {e}")
+    
+    def _set_pixel_format(self):
+        """设置像素格式（使用 32-bit RGB）"""
+        try:
+            # SetPixelFormat message: 1 byte (type) + 3 bytes (padding) + 16 bytes (format)
+            message = struct.pack('>Bxxx', 0)  # type=0 (SetPixelFormat)
+            
+            # Pixel format (16 bytes)
+            # bits-per-pixel, depth, big-endian, true-color
+            format_data = struct.pack('>BBBB', 32, 24, 0, 1)
+            
+            # red-max, green-max, blue-max
+            format_data += struct.pack('>HHH', 255, 255, 255)
+            
+            # red-shift, green-shift, blue-shift
+            format_data += struct.pack('>BBB', 16, 8, 0)
+            
+            # padding[3]
+            format_data += b'\x00\x00\x00'
+            
+            message += format_data
+            self.socket.send(message)
+            print(f"[VNC] 已设置像素格式")
+        except Exception as e:
+            print(f"[VNC] 设置像素格式失败: {e}")
+    
+    def _set_encodings(self):
+        """设置支持的编码（只使用 Raw）"""
+        try:
+            # SetEncodings message: 1 byte (type) + 1 byte (padding) + 2 bytes (num-encodings)
+            encodings = [0]  # 0 = Raw encoding
+            message = struct.pack('>BBH', 2, 0, len(encodings))  # type=2 (SetEncodings)
+            
+            # 每个编码 4 bytes (int32)
+            for enc in encodings:
+                message += struct.pack('>I', enc)
+            
+            self.socket.send(message)
+            print(f"[VNC] 已设置编码: Raw")
+        except Exception as e:
+            print(f"[VNC] 设置编码失败: {e}")
     
     def send_pointer_event(self, x, y, button_mask):
         """发送 VNC PointerEvent（触控事件）"""
