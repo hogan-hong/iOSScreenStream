@@ -37,7 +37,7 @@ class VNCClient:
         try:
             print(f"[VNC] 连接到 {self.host}:{self.port}...")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5)
+            # 移除超时，因为 ServerInit 可能需要较长时间
             self.socket.connect((self.host, self.port))
             
             # VNC 协议握手
@@ -50,6 +50,13 @@ class VNCClient:
             return True
         except Exception as e:
             print(f"[VNC] 连接失败: {e}")
+            if self.socket:
+                try:
+                    self.socket.close()
+                except:
+                    pass
+                self.socket = None
+            self.connected = False
             return False
     
     def _handshake(self):
